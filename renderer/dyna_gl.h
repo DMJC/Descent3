@@ -122,7 +122,9 @@ static module *LoadOpenGLDLL(const char *dllname) {
   return &OpenGLDLLInst;
 }
 
-#define DYNAEXTERN_OPT(Name, Opt) FnPtr<decltype(Name)> const d##Name{#Name, Opt}
+#define DYNAEXTERN_OPT(Name, Opt)                                                                                       \
+  extern FnPtr<decltype(Name)> const d##Name;                                                                           \
+  FnPtr<decltype(Name)> const d##Name{#Name, Opt}
 #define DYNAEXTERN(Name) DYNAEXTERN_OPT(Name, false)
 #else
 #define DYNAEXTERN(Name) extern FnPtr<decltype(Name)> const d##Name
