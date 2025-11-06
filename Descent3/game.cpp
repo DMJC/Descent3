@@ -686,6 +686,7 @@
 #include "pserror.h"
 #include "render.h"
 #include "renderer.h"
+#include "vr.h"
 #include "slew.h"
 #include "SmallViews.h"
 #include "stringtable.h"
@@ -925,11 +926,13 @@ void SetScreenMode(int sm, bool force_res_change) {
   //	also set any preferred renderer states.
   if (sm == SM_NULL) { // || (sm == SM_CINEMATIC && Renderer_type == RENDERER_OPENGL)) {
     if (rend_initted) {
+      d3vr::Shutdown();
       rend_Close();
       rend_initted = 0;
     }
   } else if (sm == SM_CINEMATIC) { // && (Renderer_type == RENDERER_OPENGL || Renderer_type == RENDERER_DIRECT3D)) {
     if (rend_initted) {
+      d3vr::Shutdown();
       rend_Close();
       rend_initted = 0;
     }
@@ -1008,6 +1011,7 @@ void SetScreenMode(int sm, bool force_res_change) {
   }
 
   if (rend_initted) {
+    d3vr::Initialize();
     // Get the amount of video memory
     Low_vidmem = rend_LowVidMem();
 

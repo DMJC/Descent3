@@ -47,6 +47,7 @@ option(ENABLE_MEM_RTL "Enable Real-time library memory management functions (dis
 option(FATAL_GL_ERRORS "Check OpenGL calls and raise exceptions on errors." OFF)
 option(FORCE_COLORED_OUTPUT "Always produce ANSI-colored compiler warnings/errors (GCC/Clang only; esp. useful with Ninja)." OFF)
 option(FORCE_PORTABLE_INSTALL "Install all files into local directory defined by CMAKE_INSTALL_PREFIX" ON)
+option(ENABLE_OPENVR "Enable OpenVR/SteamVR support" OFF)
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
   option(BUILD_EDITOR "Build internal editor" OFF)
 endif()
@@ -109,6 +110,10 @@ else()
   set(CMAKE_INSTALL_DATADIR "${CMAKE_INSTALL_DATADIR}/Descent3")
   # On system install files will go into /usr/share/Descent3
   set(D3_DATADIR "${CMAKE_INSTALL_FULL_DATADIR}/Descent3")
+endif()
+
+if(ENABLE_OPENVR)
+  find_package(openvr CONFIG REQUIRED)
 endif()
 
 # Get info about multi-config environment

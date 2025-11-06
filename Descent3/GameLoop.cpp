@@ -807,6 +807,7 @@
 #include "render.h"
 #include "descent.h"
 #include "slew.h"
+#include "vr.h"
 #include "log.h"
 #include "doorway.h"
 #include "weapon.h"
@@ -2450,6 +2451,7 @@ void GameRenderWorld(object *viewer, vector *viewer_eye, int viewer_roomnum, mat
 
   // Start the 3D
   g3_StartFrame(viewer_eye, viewer_orient, zoom);
+  d3vr::OnGameRenderWorldStart();
 
   // Reset fog,zbuffer
   Num_fogged_rooms_this_frame = 0;
@@ -2482,45 +2484,96 @@ void GameRenderWorld(object *viewer, vector *viewer_eye, int viewer_roomnum, mat
     viewer->orient = save_orient;
 }
 
+static bool RenderMainViewVR(object *viewer, bool rear_view) {
+  if (!d3vr::IsEnabled())
+    return false;
+
+  if (!d3vr::BeginFrame(viewer->pos, viewer->orient))
+    return false;
+
+  bool success = true;
+  const int viewer_room = viewer->roomnum;
+
+  for (d3vr::Eye eye : {d3vr::Eye::Left, d3vr::Eye::Right}) {
+    d3vr::EyeRenderData eye_data{};
+    if (!d3vr::GetEyeData(eye, eye_data)) {
+      success = false;
+      break;
+    }
+
+    if (!d3vr::BindEye(eye, eye_data)) {
+      success = false;
+      break;
+    }
+
+    d3vr::SetCurrentEyeData(&eye_data);
+
+    StartFrame(0, 0, eye_data.renderWidth, eye_data.renderHeight, true);
+    Rendering_main_view = true;
+    GameRenderWorld(viewer, &eye_data.position, viewer_room, &eye_data.orientation, eye_data.zoom, rear_view);
+    Rendering_main_view = false;
+    EndFrame();
+
+    d3vr::UnbindEye();
+    d3vr::ClearCurrentEyeData();
+  }
+
+  if (success) {
+    d3vr::SubmitFrame();
+    d3vr::MirrorToBackbuffer();
+  } else {
+    d3vr::CancelFrame();
+  }
+
+  return success;
+}
+
 // Render into the big window
-void GameDrawMainView() {
+bool GameDrawMainView() {
   extern bool Guided_missile_smallview; // smallviews.cpp
 
   bool rear_view = 0;
-  object *save_view;
+  object *save_view = nullptr;
+  bool using_guided = false;
 
-  // Start rendering
-  StartFrame(false);
-
-  // Set guided view
   if (!Cinematic_inuse && Players[Player_num].guided_obj != NULL && !Guided_missile_smallview) {
     save_view = Viewer_object;
     Viewer_object = Players[Player_num].guided_obj;
-
+    using_guided = true;
   } else if ((Viewer_object == Player_object) && (Players[Player_num].flags & PLAYER_FLAGS_REARVIEW))
     rear_view = 1;
 
-  // Draw the world
+  bool rendered_with_vr = RenderMainViewVR(Viewer_object, rear_view);
+
+  if (using_guided)
+    Viewer_object = save_view;
+
+  if (rendered_with_vr) {
+    DoRoomChangeFrame();
+    DoMatcensRenderFrame();
+    ProcessRenderEvents();
+    return true;
+  }
+
+  if (using_guided)
+    Viewer_object = Players[Player_num].guided_obj;
+
+  StartFrame(false);
+
   Rendering_main_view = true;
   GameRenderWorld(Viewer_object, &Viewer_object->pos, Viewer_object->roomnum, &Viewer_object->orient, Render_zoom,
                   rear_view);
   Rendering_main_view = false;
 
-  // Restore viewer object if guided
-  if (!Cinematic_inuse && Players[Player_num].guided_obj != NULL && !Guided_missile_smallview)
+  if (using_guided)
     Viewer_object = save_view;
 
-  // Room changes
   DoRoomChangeFrame();
-
-  // Draw Matcen Effects
   DoMatcensRenderFrame();
-
-  // Draw any render events
   ProcessRenderEvents();
 
-  // We're done with this window
   EndFrame();
+  return false;
 }
 
 // Added by Samir
@@ -2591,30 +2644,33 @@ void GameRenderFrame(void) {
 
   // Render the mine
   if (!no_render) {
-    // render preliminary hud view (for dirty rectangles)
-    if (Small_hud_flag) { // small hud flag is set in RenderHUDFrame in GameDrawHud.
+    // Draw the big 3d view
+    bool main_view_used_vr = GameDrawMainView();
+
+    // Render preliminary HUD view (for dirty rectangles) if we ended up drawing to the main buffer.
+    if (!main_view_used_vr && Small_hud_flag) { // small hud flag is set in RenderHUDFrame in GameDrawHud.
       StartFrame(0, 0, Max_window_w, Max_window_h, false);
       RenderPreHUDFrame();
       EndFrame();
     }
 
-    // Draw the big 3d view
-    GameDrawMainView();
-
     // Do the small views.  These should be before GameDrawHUD() for the small windows
-    DrawSmallViews();
+    if (!main_view_used_vr)
+      DrawSmallViews();
 
     // Do Cockpit/Hud
-    if (!HUD_disabled)
+    if (!HUD_disabled && !main_view_used_vr)
       GameDrawHud();
 
     // Render Ingame Cinematics
-    Cinematic_RenderFrame();
+    if (!main_view_used_vr)
+      Cinematic_RenderFrame();
 
     // Process the debug visual graph
-    DebugGraph_Render();
+    if (!main_view_used_vr)
+      DebugGraph_Render();
 
-    if (Display_renderer_stats) {
+    if (Display_renderer_stats && !main_view_used_vr) {
       // display some rendering stats
       tRendererStats stats;
       rend_GetStatistics(&stats);
