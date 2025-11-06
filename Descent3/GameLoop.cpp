@@ -2501,12 +2501,18 @@ static bool RenderMainViewVR(object *viewer, bool rear_view) {
       break;
     }
 
-    if (!d3vr::BindEye(eye, eye_data)) {
+    const d3vr::EyeRenderData *eye_view = d3vr::GetCachedEyeData(eye);
+    if (eye_view == nullptr) {
       success = false;
       break;
     }
 
-    d3vr::SetCurrentEyeData(&eye_data);
+    if (!d3vr::BindEye(eye, *eye_view)) {
+      success = false;
+      break;
+    }
+
+    d3vr::SetCurrentEyeData(eye_view);
 
     StartFrame(0, 0, eye_data.renderWidth, eye_data.renderHeight, true);
     Rendering_main_view = true;

@@ -41,6 +41,7 @@ bool IsEnabled();
 
 bool BeginFrame(const vector &basePos, const matrix &baseOrient);
 bool GetEyeData(Eye eye, EyeRenderData &out);
+const EyeRenderData *GetCachedEyeData(Eye eye);
 bool BindEye(Eye eye, const EyeRenderData &data);
 void UnbindEye();
 void SetCurrentEyeData(const EyeRenderData *data);

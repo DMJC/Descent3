@@ -393,6 +393,17 @@ bool GetEyeData(Eye eye, EyeRenderData &out) {
   return true;
 }
 
+const EyeRenderData *GetCachedEyeData(Eye eye) {
+  int index = static_cast<int>(eye);
+  if (index < 0 || index >= static_cast<int>(eye_data_.size())) {
+    return nullptr;
+  }
+  if (!eye_data_valid_[index]) {
+    return nullptr;
+  }
+  return &eye_data_[index];
+}
+
 bool BindEye(Eye eye, const EyeRenderData &data) {
   if (!frame_active_ || !IsEnabled()) {
     return false;
@@ -422,6 +433,8 @@ bool BindEye(Eye eye, const EyeRenderData &data) {
   bound_eye_index_ = index;
 
   dglBindFramebuffer(GL_FRAMEBUFFER, eye_targets_[index].framebuffer);
+  dglDrawBuffer(GL_COLOR_ATTACHMENT0);
+  dglReadBuffer(GL_COLOR_ATTACHMENT0);
   dglViewport(0, 0, data.renderWidth, data.renderHeight);
   dglScissor(0, 0, data.renderWidth, data.renderHeight);
   dglClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -477,6 +490,8 @@ void SubmitFrame() {
   if (!frame_active_ || !IsEnabled()) {
     return;
   }
+
+  dglFlush();
 
   vr::Texture_t left_texture{reinterpret_cast<void *>(static_cast<uintptr_t>(eye_targets_[0].color)), vr::TextureType_OpenGL,
                               vr::ColorSpace_Gamma};
@@ -550,6 +565,8 @@ bool IsEnabled() { return false; }
 bool BeginFrame(const vector &, const matrix &) { return false; }
 
 bool GetEyeData(Eye, EyeRenderData &) { return false; }
+
+const EyeRenderData *GetCachedEyeData(Eye) { return nullptr; }
 
 bool BindEye(Eye, const EyeRenderData &) { return false; }
 
