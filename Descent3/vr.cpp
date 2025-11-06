@@ -35,6 +35,7 @@
 #include <openvr.h>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 
 namespace {
@@ -73,7 +74,9 @@ int render_height_ = 0;
 bool frame_active_ = false;
 
 std::array<d3vr::EyeRenderData, 2> eye_data_{};
+std::array<bool, 2> eye_data_valid_{};
 const d3vr::EyeRenderData *current_eye_data_ = nullptr;
+d3vr::EyeRenderData scratch_eye_data_{};
 
 GLint previous_framebuffer_ = 0;
 GLint previous_viewport_[4] = {0, 0, 0, 0};
@@ -293,6 +296,7 @@ void Shutdown() {
   frame_active_ = false;
   mirror_framebuffer_ = 0;
   bound_eye_index_ = -1;
+  eye_data_valid_.fill(false);
   current_eye_data_ = nullptr;
 }
 
@@ -345,6 +349,7 @@ bool BeginFrame(const vector &basePos, const matrix &baseOrient) {
   frame_active_ = true;
   mirror_framebuffer_ = 0;
   bound_eye_index_ = -1;
+  eye_data_valid_.fill(false);
   current_eye_data_ = nullptr;
 
   return true;
@@ -383,6 +388,7 @@ bool GetEyeData(Eye eye, EyeRenderData &out) {
   FillProjectionMatrix(projection_matrix, data.projection);
 
   eye_data_[index] = data;
+  eye_data_valid_[index] = true;
   out = data;
   return true;
 }
@@ -435,7 +441,22 @@ void UnbindEye() {
   bound_eye_index_ = -1;
 }
 
-void SetCurrentEyeData(const EyeRenderData *data) { current_eye_data_ = data; }
+void SetCurrentEyeData(const EyeRenderData *data) {
+  if (data == nullptr) {
+    current_eye_data_ = nullptr;
+    return;
+  }
+
+  for (std::size_t i = 0; i < eye_data_.size(); ++i) {
+    if (eye_data_valid_[i] && data == &eye_data_[i]) {
+      current_eye_data_ = data;
+      return;
+    }
+  }
+
+  scratch_eye_data_ = *data;
+  current_eye_data_ = &scratch_eye_data_;
+}
 
 void ClearCurrentEyeData() { current_eye_data_ = nullptr; }
 
@@ -467,6 +488,7 @@ void SubmitFrame() {
   vr::VRCompositor()->PostPresentHandoff();
 
   frame_active_ = false;
+  eye_data_valid_.fill(false);
 }
 
 void MirrorToBackbuffer() {
@@ -485,10 +507,17 @@ void MirrorToBackbuffer() {
 }
 
 void CancelFrame() {
+  if (bound_eye_index_ >= 0) {
+    dglBindFramebuffer(GL_FRAMEBUFFER, previous_framebuffer_);
+    dglViewport(previous_viewport_[0], previous_viewport_[1], previous_viewport_[2], previous_viewport_[3]);
+    dglScissor(previous_scissor_[0], previous_scissor_[1], previous_scissor_[2], previous_scissor_[3]);
+    bound_eye_index_ = -1;
+  }
+
   frame_active_ = false;
-  bound_eye_index_ = -1;
   mirror_framebuffer_ = 0;
   current_eye_data_ = nullptr;
+  eye_data_valid_.fill(false);
 }
 
 } // namespace d3vr
