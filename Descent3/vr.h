@@ -20,9 +20,6 @@
 
 #include "vecmat.h"
 
-struct vector;
-struct matrix;
-
 namespace d3vr {
 
 enum class Eye : int { Left = 0, Right = 1 };

@@ -192,6 +192,7 @@ DYNAEXTERN(glCheckFramebufferStatus);
 DYNAEXTERN(glDeleteFramebuffers);
 DYNAEXTERN(glDeleteRenderbuffers);
 DYNAEXTERN(glFramebufferRenderbuffer);
+DYNAEXTERN(glFramebufferTexture2D);
 DYNAEXTERN(glGenFramebuffers);
 DYNAEXTERN(glGenRenderbuffers);
 DYNAEXTERN(glRenderbufferStorage);
