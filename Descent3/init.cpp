@@ -930,6 +930,7 @@
 #include "render.h"
 #include "descent.h"
 #include "renderer.h"
+#include "vr.h"
 #include "vclip.h"
 #include "grdefs.h"
 #include "pserror.h"
@@ -1070,6 +1071,7 @@ void PreInitD3Systems() {
   if (FindArg("-dedicated"))
     Mem_low_memory_mode = true;
   mem_Init();
+  d3vr::SetRequested(FindArg("-vr") != 0);
   if (FindArg("-himem")) {
     Mem_low_memory_mode = false;
     Mem_superlow_memory_mode = false;

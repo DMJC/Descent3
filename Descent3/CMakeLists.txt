@@ -139,7 +139,8 @@ set(HEADERS
   voice.h
   weapon.h
   weapon_external.h
-  weather.h)
+  weather.h
+  vr.h)
 
 set(CPPS
   aiambient.cpp
@@ -272,6 +273,7 @@ set(CPPS
   weapon.cpp
   WeaponFire.cpp
   weather.cpp
+  vr.cpp
   sdlmain.cpp)
 
 if(WIN32)
@@ -349,6 +351,10 @@ target_link_libraries(Descent3 PRIVATE
   unzip
   vecmat
   ${PLATFORM_LIBS})
+if(ENABLE_OPENVR)
+  target_link_libraries(Descent3 PRIVATE openvr::openvr)
+  target_compile_definitions(Descent3 PRIVATE ENABLE_OPENVR)
+endif()
 target_include_directories(Descent3 PRIVATE ${PROJECT_BINARY_DIR}/lib ${SDL3_INCLUDE_DIRS})
 target_link_options(Descent3 PRIVATE $<$<PLATFORM_ID:Windows>:/DEBUG:FULL>)
 set_target_properties(Descent3 PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/build")

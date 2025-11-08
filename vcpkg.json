@@ -3,6 +3,7 @@
   "dependencies": [
     "cpp-httplib",
     "glm",
+    "openvr",
     "gtest",
     "plog",
     {

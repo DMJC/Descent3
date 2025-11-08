@@ -122,7 +122,9 @@ static module *LoadOpenGLDLL(const char *dllname) {
   return &OpenGLDLLInst;
 }
 
-#define DYNAEXTERN_OPT(Name, Opt) FnPtr<decltype(Name)> const d##Name{#Name, Opt}
+#define DYNAEXTERN_OPT(Name, Opt)                                                                                       \
+  extern FnPtr<decltype(Name)> const d##Name;                                                                           \
+  FnPtr<decltype(Name)> const d##Name{#Name, Opt}
 #define DYNAEXTERN(Name) DYNAEXTERN_OPT(Name, false)
 #else
 #define DYNAEXTERN(Name) extern FnPtr<decltype(Name)> const d##Name
@@ -150,6 +152,7 @@ DYNAEXTERN(glDepthFunc);
 DYNAEXTERN(glDepthMask);
 DYNAEXTERN(glDisable);
 DYNAEXTERN(glDrawArrays);
+DYNAEXTERN(glDrawBuffer);
 DYNAEXTERN(glEnable);
 DYNAEXTERN(glEnableVertexAttribArray);
 DYNAEXTERN(glFlush);
@@ -170,6 +173,7 @@ DYNAEXTERN(glMapBufferRange);
 DYNAEXTERN(glPixelStorei);
 DYNAEXTERN(glPolygonOffset);
 DYNAEXTERN(glReadPixels);
+DYNAEXTERN(glReadBuffer);
 DYNAEXTERN(glScissor);
 DYNAEXTERN(glShaderSource);
 DYNAEXTERN(glTexImage2D);
@@ -192,6 +196,7 @@ DYNAEXTERN(glCheckFramebufferStatus);
 DYNAEXTERN(glDeleteFramebuffers);
 DYNAEXTERN(glDeleteRenderbuffers);
 DYNAEXTERN(glFramebufferRenderbuffer);
+DYNAEXTERN(glFramebufferTexture2D);
 DYNAEXTERN(glGenFramebuffers);
 DYNAEXTERN(glGenRenderbuffers);
 DYNAEXTERN(glRenderbufferStorage);
