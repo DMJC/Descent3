@@ -72,6 +72,7 @@ int render_width_ = 0;
 int render_height_ = 0;
 
 bool frame_active_ = false;
+bool warned_pose_failure_ = false;
 
 std::array<d3vr::EyeRenderData, 2> eye_data_{};
 std::array<bool, 2> eye_data_valid_{};
@@ -269,6 +270,7 @@ bool Initialize() {
 
   have_initial_pose_ = false;
   frame_active_ = false;
+  warned_pose_failure_ = false;
   mirror_framebuffer_ = 0;
   bound_eye_index_ = -1;
 
@@ -294,6 +296,7 @@ void Shutdown() {
   initialized_ = false;
   have_initial_pose_ = false;
   frame_active_ = false;
+  warned_pose_failure_ = false;
   mirror_framebuffer_ = 0;
   bound_eye_index_ = -1;
   eye_data_valid_.fill(false);
@@ -318,29 +321,50 @@ bool BeginFrame(const vector &basePos, const matrix &baseOrient) {
 
   std::array<vr::TrackedDevicePose_t, vr::k_unMaxTrackedDeviceCount> poses{};
   auto pose_error = compositor->WaitGetPoses(poses.data(), static_cast<uint32_t>(poses.size()), nullptr, 0);
-  if (pose_error != vr::VRCompositorError_None) {
-    LOG_WARNING << "OpenVR: WaitGetPoses failed with error " << pose_error;
-    return false;
+
+  bool have_pose = false;
+  bool pose_invalid = false;
+  if (pose_error == vr::VRCompositorError_None) {
+    const vr::TrackedDevicePose_t &hmd_pose = poses[vr::k_unTrackedDeviceIndex_Hmd];
+    if (hmd_pose.bPoseIsValid) {
+      glm::quat current_orientation = ConvertRotation(hmd_pose.mDeviceToAbsoluteTracking);
+      glm::vec3 current_position = ConvertTranslation(hmd_pose.mDeviceToAbsoluteTracking);
+
+      if (!have_initial_pose_) {
+        initial_orientation_ = current_orientation;
+        initial_position_ = current_position;
+        have_initial_pose_ = true;
+      }
+
+      relative_orientation_ = current_orientation * glm::inverse(initial_orientation_);
+      relative_orientation_ = glm::normalize(relative_orientation_);
+      head_offset_ = (current_position - initial_position_) * kMetersToGameUnits;
+
+      warned_pose_failure_ = false;
+      have_pose = true;
+    } else {
+      pose_invalid = true;
+    }
   }
 
-  const vr::TrackedDevicePose_t &hmd_pose = poses[vr::k_unTrackedDeviceIndex_Hmd];
-  if (!hmd_pose.bPoseIsValid) {
-    LOG_WARNING << "OpenVR: HMD pose is invalid.";
-    return false;
+  if (!have_pose) {
+    if (!warned_pose_failure_) {
+      if (pose_error == vr::VRCompositorError_None) {
+        if (pose_invalid) {
+          LOG_WARNING << "OpenVR: using last valid HMD pose (pose reported invalid)";
+        } else {
+          LOG_WARNING << "OpenVR: using last valid HMD pose (no pose returned)";
+        }
+      } else {
+        LOG_WARNING << "OpenVR: using last valid HMD pose (WaitGetPoses error " << pose_error << ")";
+      }
+      warned_pose_failure_ = true;
+    }
+
+    if (!have_initial_pose_) {
+      return false;
+    }
   }
-
-  glm::quat current_orientation = ConvertRotation(hmd_pose.mDeviceToAbsoluteTracking);
-  glm::vec3 current_position = ConvertTranslation(hmd_pose.mDeviceToAbsoluteTracking);
-
-  if (!have_initial_pose_) {
-    initial_orientation_ = current_orientation;
-    initial_position_ = current_position;
-    have_initial_pose_ = true;
-  }
-
-  relative_orientation_ = current_orientation * glm::inverse(initial_orientation_);
-  relative_orientation_ = glm::normalize(relative_orientation_);
-  head_offset_ = (current_position - initial_position_) * kMetersToGameUnits;
 
   base_orientation_matrix_ = MatrixToGlm(baseOrient);
   base_orientation_quat_ = glm::quat_cast(base_orientation_matrix_);
