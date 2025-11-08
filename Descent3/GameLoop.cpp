@@ -2515,9 +2515,7 @@ static bool RenderMainViewVR(object *viewer, bool rear_view) {
     d3vr::SetCurrentEyeData(eye_view);
 
     StartFrame(0, 0, eye_data.renderWidth, eye_data.renderHeight, true);
-    Rendering_main_view = true;
     GameRenderWorld(viewer, &eye_data.position, viewer_room, &eye_data.orientation, eye_data.zoom, rear_view);
-    Rendering_main_view = false;
     EndFrame();
 
     d3vr::UnbindEye();
@@ -2549,7 +2547,9 @@ bool GameDrawMainView() {
   } else if ((Viewer_object == Player_object) && (Players[Player_num].flags & PLAYER_FLAGS_REARVIEW))
     rear_view = 1;
 
+  Rendering_main_view = true;
   bool rendered_with_vr = RenderMainViewVR(Viewer_object, rear_view);
+  Rendering_main_view = false;
 
   if (using_guided)
     Viewer_object = save_view;
