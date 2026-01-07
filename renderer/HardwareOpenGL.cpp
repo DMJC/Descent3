@@ -49,6 +49,7 @@
 #include "config.h"
 #include "rtperformance.h"
 #include "HardwareInternal.h"
+#include "vr/VRSystem.h"
 #include "args.h"
 #include "NewBitmap.h"
 #include "shaders.h"
@@ -1467,7 +1468,7 @@ void rend_Flip() {
   OpenGL_verts_processed = 0;
 
   // if we're rendering to an FBO, scale to the window framebuffer!
-  if (GOpenGLFBO != 0) {
+  if (GOpenGLFBO != 0 && !VRSystem::Get().Enabled()) {
     int w, h;
     SDL_GetWindowSizeInPixels(GSDLWindow, &w, &h);
 

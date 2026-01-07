@@ -200,6 +200,7 @@
 #include "textaux.h"
 #include "d3music.h"
 #include "hlsoundlib.h"
+#include "vr/VRSystem.h"
 
 extern void ui_DoCursor();
 
@@ -610,6 +611,13 @@ int DoUI() {
 
 //	does one frame of ui.
 void DoUIFrame() {
+  const bool vr_enabled = VRSystem::Get().Enabled();
+  if (vr_enabled) {
+    VRSystem::Get().SetBasePose(Zero_vector, Identity_matrix);
+    VRSystem::Get().BeginFrame();
+    VRSystem::Get().BeginCinema();
+  }
+
   if (Multi_bail_ui_menu) {
     UI_frame_result = NEWUIRES_FORCEQUIT;
   } else {
@@ -636,10 +644,24 @@ void DoUIFrame() {
     UI_input.printscreen = false;
     DoScreenshot();
   }
+
+  if (vr_enabled) {
+    VRSystem::Get().EndCinema();
+    VRSystem::Get().RenderEye(VRSystem::Eye::Left, []() { VRSystem::Get().RenderCinemaScreen(); });
+    VRSystem::Get().RenderEye(VRSystem::Eye::Right, []() { VRSystem::Get().RenderCinemaScreen(); });
+    VRSystem::Get().SubmitEyes();
+  }
 }
 
 //	does one frame of ui.
 void DoUIFrameWithoutInput() {
+  const bool vr_enabled = VRSystem::Get().Enabled();
+  if (vr_enabled) {
+    VRSystem::Get().SetBasePose(Zero_vector, Identity_matrix);
+    VRSystem::Get().BeginFrame();
+    VRSystem::Get().BeginCinema();
+  }
+
   if (Multi_bail_ui_menu) {
     UI_frame_result = NEWUIRES_FORCEQUIT;
   } else {
@@ -660,6 +682,13 @@ void DoUIFrameWithoutInput() {
     }
 
     UI_frame_result = ui_DoFrame(false);
+  }
+
+  if (vr_enabled) {
+    VRSystem::Get().EndCinema();
+    VRSystem::Get().RenderEye(VRSystem::Eye::Left, []() { VRSystem::Get().RenderCinemaScreen(); });
+    VRSystem::Get().RenderEye(VRSystem::Eye::Right, []() { VRSystem::Get().RenderCinemaScreen(); });
+    VRSystem::Get().SubmitEyes();
   }
 }
 

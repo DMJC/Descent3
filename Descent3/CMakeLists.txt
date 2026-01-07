@@ -138,6 +138,7 @@ set(HEADERS
   viseffect_external.h
   voice.h
   weapon.h
+  vr/VRSystem.h
   weapon_external.h
   weather.h)
 
@@ -271,6 +272,7 @@ set(CPPS
   voice.cpp
   weapon.cpp
   WeaponFire.cpp
+  vr/VRSystem.cpp
   weather.cpp
   sdlmain.cpp)
 
@@ -349,7 +351,9 @@ target_link_libraries(Descent3 PRIVATE
   unzip
   vecmat
   ${PLATFORM_LIBS})
-target_include_directories(Descent3 PRIVATE ${PROJECT_BINARY_DIR}/lib ${SDL3_INCLUDE_DIRS})
+target_include_directories(Descent3 PRIVATE ${PROJECT_BINARY_DIR}/lib ${SDL3_INCLUDE_DIRS} ${OPENVR_INCLUDE_DIR})
+target_link_libraries(Descent3 PRIVATE ${OPENVR_LIBRARY})
+
 target_link_options(Descent3 PRIVATE $<$<PLATFORM_ID:Windows>:/DEBUG:FULL>)
 set_target_properties(Descent3 PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/build")
 add_dependencies(Descent3

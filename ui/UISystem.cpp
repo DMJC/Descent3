@@ -173,6 +173,7 @@
 #include "pserror.h"
 #include "renderer.h"
 #include "Macros.h"
+#include "vr/VRSystem.h"
 
 constexpr float kDefaultMouseScale = 20;
 
@@ -265,8 +266,47 @@ void ui_Close() {
 bool ui_MousePoll(bool buttons) {
   int mx, my;
   static int btn_mask = 0;
+  static bool vr_click_down = false;
   int msebtn;
   bool state;
+  if (VRSystem::Get().Enabled() && VRSystem::Get().InCinemaMode()) {
+    int vr_x = 0;
+    int vr_y = 0;
+    bool vr_click = false;
+    if (VRSystem::Get().GetCinemaPointer(vr_x, vr_y, vr_click)) {
+      int cinema_w = 0;
+      int cinema_h = 0;
+      VRSystem::Get().GetCinemaSize(cinema_w, cinema_h);
+      if (cinema_w > 0 && cinema_h > 0) {
+        vr_x = (vr_x * UI_screen_width) / cinema_w;
+        vr_y = (vr_y * UI_screen_height) / cinema_h;
+      }
+      if (!buttons) {
+        UI_input.last_mx = UI_input.mx;
+        UI_input.last_my = UI_input.my;
+        UI_input.mx = vr_x;
+        UI_input.my = vr_y;
+        return false;
+      }
+      if (UI_cursor_show) {
+        if (vr_click != vr_click_down) {
+          UI_input.b1_last_status = UI_input.b1_status;
+          UI_input.b1_status = vr_click ? UIMSEBTN_PRESSED : UIMSEBTN_RELEASED;
+          UI_input.b1_count = 1;
+          vr_click_down = vr_click;
+          return true;
+        }
+        if (vr_click_down && UI_input.b1_count == 0) {
+          UI_input.b1_last_status = UI_input.b1_status;
+          UI_input.b1_status = UIMSEBTN_PRESSED;
+          UI_input.b1_count = 1;
+          return true;
+        }
+        UI_input.b1_status = 0;
+        return false;
+      }
+    }
+  }
   if (!buttons) {
     //	get all input, mouse maintains persistent button info. key doesn't.
     btn_mask = ddio_MouseGetState(&mx, &my, NULL, NULL);

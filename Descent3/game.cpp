@@ -689,6 +689,7 @@
 #include "slew.h"
 #include "SmallViews.h"
 #include "stringtable.h"
+#include "vr/VRSystem.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 //	Variables
@@ -1208,6 +1209,18 @@ void StartFrame(int x, int y, int x2, int y2, bool clear, bool push_on_stack) {
   if (push_on_stack) {
     // push this frame onto the stack
     FramePush(x, y, x2, y2, clear);
+  }
+
+  if (VRSystem::Get().Enabled()) {
+    int vr_w = 0;
+    int vr_h = 0;
+    if (VRSystem::Get().GetActiveViewport(vr_w, vr_h)) {
+      x = 0;
+      y = 0;
+      x2 = vr_w;
+      y2 = vr_h;
+      VRSystem::Get().BindActiveRenderTarget();
+    }
   }
 
   rend_StartFrame(x, y, x2, y2);

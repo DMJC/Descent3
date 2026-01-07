@@ -838,6 +838,7 @@
 #include "object_lighting.h"
 #include "weather.h"
 #include "stringtable.h"
+#include "vr/VRSystem.h"
 #include "voice.h"
 #include "soundload.h"
 #include "sounds.h"
@@ -2550,6 +2551,62 @@ void GameDrawHud() {
   EndFrame();
 }
 
+static void RenderGameFrameScene(bool no_render) {
+  if (no_render) {
+    return;
+  }
+
+  // render preliminary hud view (for dirty rectangles)
+  if (Small_hud_flag) { // small hud flag is set in RenderHUDFrame in GameDrawHud.
+    StartFrame(0, 0, Max_window_w, Max_window_h, false);
+    RenderPreHUDFrame();
+    EndFrame();
+  }
+
+  // Draw the big 3d view
+  GameDrawMainView();
+
+  // Do the small views.  These should be before GameDrawHUD() for the small windows
+  DrawSmallViews();
+
+  // Do Cockpit/Hud
+  if (!HUD_disabled)
+    GameDrawHud();
+
+  // Render Ingame Cinematics
+  Cinematic_RenderFrame();
+
+  // Process the debug visual graph
+  DebugGraph_Render();
+
+  if (Display_renderer_stats) {
+    // display some rendering stats
+    tRendererStats stats;
+    rend_GetStatistics(&stats);
+    grtext_SetFont(HUD_FONT);
+
+    char buffer[128];
+    int x, y, height;
+
+    x = 15;
+    y = 240;
+    StartFrame(0, 0, Game_window_w, Game_window_h);
+    rend_StartFrame(0, 0, Game_window_w, Game_window_h, 0);
+    height = grfont_GetHeight(HUD_FONT) + 1;
+    snprintf(buffer, sizeof(buffer), "Polys=%d", stats.poly_count);
+    RenderHUDText(GR_RGB(255, 40, 40), 255, 1, x, y, buffer);
+    y += height;
+    snprintf(buffer, sizeof(buffer), "Verts=%d", stats.vert_count);
+    RenderHUDText(GR_RGB(255, 40, 40), 255, 1, x, y, buffer);
+    y += height;
+    snprintf(buffer, sizeof(buffer), "Uploads=%d", stats.texture_uploads);
+    RenderHUDText(GR_RGB(255, 40, 40), 255, 1, x, y, buffer);
+    y += height;
+    grtext_Flush();
+    EndFrame();
+  }
+}
+
 // Draw a frame of the game
 void GameRenderFrame(void) {
   bool no_render = false;
@@ -2589,63 +2646,60 @@ void GameRenderFrame(void) {
     Clear_screen--;
   }
 
-  // Render the mine
-  if (!no_render) {
-    // render preliminary hud view (for dirty rectangles)
-    if (Small_hud_flag) { // small hud flag is set in RenderHUDFrame in GameDrawHud.
-      StartFrame(0, 0, Max_window_w, Max_window_h, false);
-      RenderPreHUDFrame();
-      EndFrame();
+  bool vr_enabled = VRSystem::Get().Enabled();
+  bool vr_cinema = vr_enabled && (Cinematic_inuse || Menu_interface_mode || Game_interface_mode != GAME_INTERFACE);
+
+  if (vr_enabled) {
+    if (vr_cinema) {
+      VRSystem::Get().SetBasePose(Zero_vector, Identity_matrix);
+    } else {
+      VRSystem::Get().SetBasePose(Viewer_object->pos, Viewer_object->orient);
     }
-
-    // Draw the big 3d view
-    GameDrawMainView();
-
-    // Do the small views.  These should be before GameDrawHUD() for the small windows
-    DrawSmallViews();
-
-    // Do Cockpit/Hud
-    if (!HUD_disabled)
-      GameDrawHud();
-
-    // Render Ingame Cinematics
-    Cinematic_RenderFrame();
-
-    // Process the debug visual graph
-    DebugGraph_Render();
-
-    if (Display_renderer_stats) {
-      // display some rendering stats
-      tRendererStats stats;
-      rend_GetStatistics(&stats);
-      grtext_SetFont(HUD_FONT);
-
-      char buffer[128];
-      int x, y, height;
-
-      x = 15;
-      y = 240;
-      StartFrame(0, 0, Game_window_w, Game_window_h);
-      rend_StartFrame(0, 0, Game_window_w, Game_window_h, 0);
-      height = grfont_GetHeight(HUD_FONT) + 1;
-      snprintf(buffer, sizeof(buffer), "Polys=%d", stats.poly_count);
-      RenderHUDText(GR_RGB(255, 40, 40), 255, 1, x, y, buffer);
-      y += height;
-      snprintf(buffer, sizeof(buffer), "Verts=%d", stats.vert_count);
-      RenderHUDText(GR_RGB(255, 40, 40), 255, 1, x, y, buffer);
-      y += height;
-      snprintf(buffer, sizeof(buffer), "Uploads=%d", stats.texture_uploads);
-      RenderHUDText(GR_RGB(255, 40, 40), 255, 1, x, y, buffer);
-      y += height;
-      grtext_Flush();
-      EndFrame();
-    }
+    VRSystem::Get().BeginFrame();
   }
 
-  // Do UI Frame
-  if (Game_interface_mode == GAME_INTERFACE && !Menu_interface_mode) {
-    DoUIFrameWithoutInput();
+  if (vr_enabled && vr_cinema) {
+    VRSystem::Get().BeginCinema();
+    if (!no_render) {
+      Cinematic_RenderFrame();
+      DebugGraph_Render();
+    }
+    VRSystem::Get().EndCinema();
+
+    VRSystem::Get().RenderEye(VRSystem::Eye::Left, []() { VRSystem::Get().RenderCinemaScreen(); });
+    VRSystem::Get().RenderEye(VRSystem::Eye::Right, []() { VRSystem::Get().RenderCinemaScreen(); });
+    VRSystem::Get().SubmitEyes();
     rend_Flip();
+  } else if (vr_enabled) {
+    vector saved_pos = Viewer_object->pos;
+    matrix saved_orient = Viewer_object->orient;
+    float old_zoom = Render_zoom;
+
+    auto render_eye = [&](VRSystem::Eye eye) {
+      Viewer_object->pos = VRSystem::Get().GetEyePosition(eye);
+      Viewer_object->orient = VRSystem::Get().GetEyeView(eye);
+      Render_zoom = VRSystem::Get().GetEyeZoom(eye);
+      RenderGameFrameScene(no_render);
+      if (Game_interface_mode == GAME_INTERFACE && !Menu_interface_mode) {
+        DoUIFrameWithoutInput();
+      }
+    };
+
+    VRSystem::Get().RenderEye(VRSystem::Eye::Left, [&]() { render_eye(VRSystem::Eye::Left); });
+    VRSystem::Get().RenderEye(VRSystem::Eye::Right, [&]() { render_eye(VRSystem::Eye::Right); });
+    VRSystem::Get().SubmitEyes();
+    rend_Flip();
+
+    Render_zoom = old_zoom;
+    Viewer_object->pos = saved_pos;
+    Viewer_object->orient = saved_orient;
+  } else {
+    RenderGameFrameScene(no_render);
+    // Do UI Frame
+    if (Game_interface_mode == GAME_INTERFACE && !Menu_interface_mode) {
+      DoUIFrameWithoutInput();
+      rend_Flip();
+    }
   }
 
   // Restore normal view

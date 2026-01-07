@@ -948,6 +948,7 @@
 #include "gamefile.h"
 #include "gamespy.h"
 #include "TelCom.h"
+#include "vr/VRSystem.h"
 #include "objinfo.h"
 #include "cinematics.h"
 #include "lightmap_info.h"
@@ -1893,6 +1894,7 @@ void InitD3Systems1(bool editor) {
 void InitD3Systems2(bool editor) {
   // Initialize In-Game Cinematics system
   Cinematic_Init();
+  VRSystem::Get().Initialize(FindArg("-vr") > 0 && !Dedicated_server);
 
 //	initialize slewing
 #ifdef EDITOR
@@ -2077,6 +2079,7 @@ void ShutdownD3() {
 
   // Close forcefeedback effects
   ForceShutdown();
+  VRSystem::Get().Shutdown();
 
   //	shutdown game systems
   Init_old_control_mode = Control_poll_flag;
