@@ -34,5 +34,7 @@ target_link_libraries(ui PRIVATE
 target_include_directories(ui PUBLIC
   $<BUILD_INTERFACE:
     ${PROJECT_SOURCE_DIR}/ui
+    ${PROJECT_SOURCE_DIR}/Descent3
+    ${OPENVR_INCLUDE_DIR}
   >
 )

@@ -30,7 +30,12 @@ set(CPPS
 )
 
 add_library(renderer STATIC ${HEADERS} ${CPPS})
-target_include_directories(renderer PRIVATE ${GENERATED_HEADERS} ${SDL3_INCLUDE_DIRS})
+target_include_directories(renderer PRIVATE
+  ${GENERATED_HEADERS}
+  ${SDL3_INCLUDE_DIRS}
+  ${PROJECT_SOURCE_DIR}/Descent3
+  ${OPENVR_INCLUDE_DIR}
+)
 target_link_libraries(renderer PRIVATE
   glm::glm
   SDL3::SDL3
