@@ -124,6 +124,8 @@ void VR_UpdateMenuTexture(const NewBitmap &screenshot) {
   if (!src_data) {
     return;
   }
+  const bool stereo_side_by_side = (h > 0) && (w >= h * 2);
+  const uint32_t src_w = stereo_side_by_side ? (w / 2) : w;
   uint16_t *dest_data = bm_data(Vr_menu_bitmap, 0);
   if (!dest_data) {
     return;
@@ -133,7 +135,7 @@ void VR_UpdateMenuTexture(const NewBitmap &screenshot) {
   for (int y = 0; y < dest_size; ++y) {
     for (int x = 0; x < dest_size; ++x) {
       uint16_t pixel = GR_RGB16(0, 0, 0);
-      if (x < static_cast<int>(w) && y < static_cast<int>(h)) {
+      if (x < static_cast<int>(src_w) && y < static_cast<int>(h)) {
         const uint32_t spix = src_data[y * w + x];
         const int r = spix & 0xff;
         const int g = (spix >> 8) & 0xff;
@@ -206,11 +208,13 @@ void VR_UpdateSubmitTexture(const NewBitmap &screenshot) {
   if (!src_data) {
     return;
   }
+  const bool stereo_side_by_side = (src_h > 0) && (src_w >= src_h * 2);
+  const uint32_t sample_width = stereo_side_by_side ? (src_w / 2) : src_w;
 
   for (uint32_t y = 0; y < Vr_submit_height; ++y) {
     const uint32_t src_y = (y * src_h) / Vr_submit_height;
     for (uint32_t x = 0; x < Vr_submit_width; ++x) {
-      const uint32_t src_x = (x * src_w) / Vr_submit_width;
+      const uint32_t src_x = (x * sample_width) / Vr_submit_width;
       const uint32_t spix = src_data[src_y * src_w + src_x];
       Vr_submit_buffer[((Vr_submit_height - 1) - y) * Vr_submit_width + x] = spix;
     }
