@@ -1703,6 +1703,11 @@ std::unique_ptr<NewBitmap> rend_Screenshot() {
     return nullptr;
   }
 
+  if (GOpenGLFBO != 0) {
+    dglReadBuffer(GL_COLOR_ATTACHMENT0);
+  } else {
+    dglReadBuffer(GL_BACK);
+  }
   dglReadPixels(0, 0, gpu_state.screen_width, gpu_state.screen_height, GL_RGBA, GL_UNSIGNED_BYTE,
                 (GLvoid *)result->getData());
 
