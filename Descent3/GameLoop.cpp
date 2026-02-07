@@ -2531,7 +2531,7 @@ void GameDrawMainView() {
       matrix eye_orient;
       vm_AnglesToMatrix(&toe_in_matrix, 0, toe_in_heading, 0);
       vm_MatrixMul(&eye_orient, &toe_in_matrix, &view_orient);
-      vector eye_pos = Viewer_object->pos + (eye_orient.rvec * (eye_sign * eye_offset));
+      vector eye_pos = Viewer_object->pos + (view_orient.rvec * (eye_sign * eye_offset));
       StartFrame(false);
       rend_ClearScreen(GR_BLACK);
       GameRenderWorld(Viewer_object, &eye_pos, Viewer_object->roomnum, &eye_orient, Render_zoom, false);
