@@ -1581,6 +1581,9 @@ void LoadLevelProgress(int step, float percent, const char *chunk) {
   grtext_Flush();
   EndFrame();
   rend_Flip();
+  if (VR_IsEnabled()) {
+    VR_RenderMenuFrame();
+  }
 }
 
 /**
