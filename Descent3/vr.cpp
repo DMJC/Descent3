@@ -29,7 +29,7 @@
 #include "game.h"
 #include "log.h"
 #include "NewBitmap.h"
-#include "dyna_gl.h"
+#include "../renderer/dyna_gl.h"
 #include "openvr.h"
 #include "renderer.h"
 #include "vecmat.h"
