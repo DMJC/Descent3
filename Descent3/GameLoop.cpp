@@ -2516,6 +2516,7 @@ void GameDrawMainView() {
       }
     }
 
+    constexpr float kHudRenderZoom = 0.56f;
     const float eye_offset = VR_GetStereoEyeSeparation() * 0.5f;
     auto render_eye = [&](float eye_sign) {
       vector eye_pos = Viewer_object->pos + (view_orient.rvec * (eye_sign * eye_offset));
@@ -2524,6 +2525,9 @@ void GameDrawMainView() {
       GameRenderWorld(Viewer_object, &eye_pos, Viewer_object->roomnum, &view_orient, Render_zoom, false);
       DoMatcensRenderFrame();
       ProcessRenderEvents();
+      g3_StartFrame(&eye_pos, &view_orient, kHudRenderZoom);
+      RenderHUDFrame();
+      g3_EndFrame();
       EndFrame();
       return rend_Screenshot();
     };
