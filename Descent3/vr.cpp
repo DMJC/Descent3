@@ -414,18 +414,6 @@ void VR_RenderMenuFrame() {
   auto screenshot = rend_Screenshot();
   if (screenshot && screenshot->getData()) {
     VR_UpdateMenuTexture(*screenshot);
-    if (Vr_render_mode == VrRenderMode::Stereo) {
-      if (!VR_EnsureSubmitSurface(Vr_submit_left) || !VR_EnsureSubmitSurface(Vr_submit_right)) {
-        return;
-      }
-      VR_UpdateSubmitSurface(*screenshot, Vr_submit_left, true);
-      VR_UpdateSubmitSurface(*screenshot, Vr_submit_right, true);
-    } else {
-      if (!VR_EnsureSubmitSurface(Vr_submit_cinema)) {
-        return;
-      }
-      VR_UpdateSubmitSurface(*screenshot, Vr_submit_cinema, true);
-    }
   }
 
   StartFrame(0, 0, Max_window_w, Max_window_h);
@@ -441,6 +429,22 @@ void VR_RenderMenuFrame() {
 
   g3_EndFrame();
   EndFrame();
+
+  auto curved_frame = rend_Screenshot();
+  if (curved_frame && curved_frame->getData()) {
+    if (Vr_render_mode == VrRenderMode::Stereo) {
+      if (!VR_EnsureSubmitSurface(Vr_submit_left) || !VR_EnsureSubmitSurface(Vr_submit_right)) {
+        return;
+      }
+      VR_UpdateSubmitSurface(*curved_frame, Vr_submit_left, false);
+      VR_UpdateSubmitSurface(*curved_frame, Vr_submit_right, false);
+    } else {
+      if (!VR_EnsureSubmitSurface(Vr_submit_cinema)) {
+        return;
+      }
+      VR_UpdateSubmitSurface(*curved_frame, Vr_submit_cinema, false);
+    }
+  }
 
   if (Vr_openvr_ready && vr::VRCompositor()) {
     if (Vr_render_mode == VrRenderMode::Stereo) {
