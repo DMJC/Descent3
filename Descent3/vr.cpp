@@ -184,14 +184,14 @@ void VR_EnsureSubmitTexture() {
   Vr_submit_buffer.resize(static_cast<size_t>(target_w) * static_cast<size_t>(target_h));
 }
 
-void VR_UpdateSubmitTexture(const NewBitmap &screenshot) {
+bool VR_UpdateSubmitTexture(const NewBitmap &screenshot) {
   if (!Vr_openvr_ready || Vr_submit_texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
-    return;
+    return false;
   }
 
   auto &gl = VR_GetGlFns();
   if (!gl.bind_texture || !gl.tex_sub_image_2d) {
-    return;
+    return false;
   }
 
   uint32_t src_w = 0;
@@ -199,7 +199,7 @@ void VR_UpdateSubmitTexture(const NewBitmap &screenshot) {
   screenshot.getSize(src_w, src_h);
   auto *src_data = reinterpret_cast<uint32_t *>(screenshot.getData());
   if (!src_data) {
-    return;
+    return false;
   }
 
   for (uint32_t y = 0; y < Vr_submit_height; ++y) {
@@ -214,6 +214,7 @@ void VR_UpdateSubmitTexture(const NewBitmap &screenshot) {
   gl.bind_texture(GL_TEXTURE_2D, Vr_submit_texture);
   gl.tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, Vr_submit_width, Vr_submit_height, GL_RGBA, GL_UNSIGNED_BYTE,
                       Vr_submit_buffer.data());
+  return true;
 }
 
 void VR_UpdateOpenVRPoses() {
@@ -328,8 +329,10 @@ void VR_RenderMenuFrame() {
   }
 
   auto menu_capture = rend_Screenshot();
+  bool menu_capture_ok = false;
   if (menu_capture && menu_capture->getData()) {
     VR_UpdateMenuTexture(*menu_capture);
+    menu_capture_ok = true;
   }
 
   StartFrame(0, 0, Max_window_w, Max_window_h);
@@ -346,9 +349,13 @@ void VR_RenderMenuFrame() {
   g3_EndFrame();
   EndFrame();
 
+  bool submit_ok = false;
   auto submit_capture = rend_Screenshot();
   if (submit_capture && submit_capture->getData()) {
-    VR_UpdateSubmitTexture(*submit_capture);
+    submit_ok = VR_UpdateSubmitTexture(*submit_capture);
+  }
+  if (!submit_ok && menu_capture_ok) {
+    VR_UpdateSubmitTexture(*menu_capture);
   }
 
   if (Vr_openvr_ready && Vr_submit_texture != 0 && vr::VRCompositor()) {
