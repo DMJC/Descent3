@@ -139,7 +139,7 @@ void VR_UpdateMenuTexture(const NewBitmap &screenshot) {
         const int b = (spix >> 16) & 0xff;
         pixel = GR_RGB16(r, g, b);
       }
-      dest_data[((dest_size - 1) - y) * dest_size + x] = pixel;
+      dest_data[y * dest_size + x] = pixel;
     }
   }
 }
@@ -207,7 +207,7 @@ void VR_UpdateSubmitTexture(const NewBitmap &screenshot) {
     for (uint32_t x = 0; x < Vr_submit_width; ++x) {
       const uint32_t src_x = (x * src_w) / Vr_submit_width;
       const uint32_t spix = src_data[src_y * src_w + src_x];
-      Vr_submit_buffer[((Vr_submit_height - 1) - y) * Vr_submit_width + x] = spix;
+      Vr_submit_buffer[y * Vr_submit_width + x] = spix;
     }
   }
 
@@ -327,10 +327,9 @@ void VR_RenderMenuFrame() {
     return;
   }
 
-  auto screenshot = rend_Screenshot();
-  if (screenshot && screenshot->getData()) {
-    VR_UpdateMenuTexture(*screenshot);
-    VR_UpdateSubmitTexture(*screenshot);
+  auto menu_capture = rend_Screenshot();
+  if (menu_capture && menu_capture->getData()) {
+    VR_UpdateMenuTexture(*menu_capture);
   }
 
   StartFrame(0, 0, Max_window_w, Max_window_h);
@@ -346,6 +345,11 @@ void VR_RenderMenuFrame() {
 
   g3_EndFrame();
   EndFrame();
+
+  auto submit_capture = rend_Screenshot();
+  if (submit_capture && submit_capture->getData()) {
+    VR_UpdateSubmitTexture(*submit_capture);
+  }
 
   if (Vr_openvr_ready && Vr_submit_texture != 0 && vr::VRCompositor()) {
     vr::Texture_t texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_texture)),
