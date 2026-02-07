@@ -839,6 +839,7 @@
 #include "weather.h"
 #include "stringtable.h"
 #include "voice.h"
+#include "vecmat.h"
 #include "soundload.h"
 #include "sounds.h"
 #include "ambient.h"
@@ -2517,11 +2518,17 @@ void GameDrawMainView() {
     }
 
     const float eye_offset = VR_GetStereoEyeSeparation() * 0.5f;
+    constexpr float kToeInConvergenceDistance = 50.0f;
     auto render_eye = [&](float eye_sign) {
       vector eye_pos = Viewer_object->pos + (view_orient.rvec * (eye_sign * eye_offset));
+      vector target = Viewer_object->pos + (view_orient.fvec * kToeInConvergenceDistance);
+      vector eye_fvec;
+      vm_GetNormalizedDir(&eye_fvec, &target, &eye_pos);
+      matrix eye_orient;
+      vm_VectorToMatrix(&eye_orient, &eye_fvec, &view_orient.uvec, nullptr);
       StartFrame(false);
       rend_ClearScreen(GR_BLACK);
-      GameRenderWorld(Viewer_object, &eye_pos, Viewer_object->roomnum, &view_orient, Render_zoom, false);
+      GameRenderWorld(Viewer_object, &eye_pos, Viewer_object->roomnum, &eye_orient, Render_zoom, false);
       DoMatcensRenderFrame();
       ProcessRenderEvents();
       EndFrame();
