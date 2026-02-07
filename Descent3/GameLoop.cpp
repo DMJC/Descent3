@@ -798,7 +798,6 @@
  * $NoKeywords: $
  */
 
-#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -2520,18 +2519,14 @@ void GameDrawMainView() {
 
     constexpr float kHudRenderZoom = 0.56f;
     constexpr float kToeInConvergenceDistance = 2.0f;
-    constexpr float kPi = 3.141592654f;
-    constexpr float kAngleScale = 65536.0f / (2.0f * kPi);
     const float eye_offset = VR_GetStereoEyeSeparation() * 0.5f;
     auto render_eye = [&](float eye_sign) {
-      const float toe_in = std::atan2(eye_offset, kToeInConvergenceDistance);
-      const float signed_toe_in = -eye_sign * toe_in;
-      const angle toe_in_heading = static_cast<angle>(signed_toe_in * kAngleScale);
-      matrix toe_in_matrix;
-      matrix eye_orient;
-      vm_AnglesToMatrix(&toe_in_matrix, 0, toe_in_heading, 0);
-      vm_MatrixMul(&eye_orient, &toe_in_matrix, &view_orient);
       vector eye_pos = Viewer_object->pos + (view_orient.rvec * (eye_sign * eye_offset));
+      const vector converge_point = Viewer_object->pos + (view_orient.fvec * kToeInConvergenceDistance);
+      vector eye_fvec = converge_point - eye_pos;
+      vm_NormalizeVector(&eye_fvec);
+      matrix eye_orient;
+      vm_VectorToMatrix(&eye_orient, &eye_fvec, &view_orient.uvec, nullptr);
       StartFrame(false);
       rend_ClearScreen(GR_BLACK);
       GameRenderWorld(Viewer_object, &eye_pos, Viewer_object->roomnum, &eye_orient, Render_zoom, false);
