@@ -863,6 +863,7 @@
 #include "gamefont.h"
 #include "renderobject.h"
 #include "buddymenu.h"
+#include "NewBitmap.h"
 #include "pserror.h"
 
 #ifdef EDITOR
