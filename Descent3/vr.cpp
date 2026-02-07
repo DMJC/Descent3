@@ -39,15 +39,24 @@
 namespace {
 bool Vr_enabled = false;
 bool Vr_openvr_ready = false;
+VrRenderMode Vr_render_mode = VrRenderMode::Cinema;
 vr::IVRSystem *Vr_system = nullptr;
-GLuint Vr_submit_texture = 0;
+float Vr_eye_separation = 0.064f;
 uint32_t Vr_submit_width = 0;
 uint32_t Vr_submit_height = 0;
-std::vector<uint32_t> Vr_submit_buffer;
+struct VrSubmitSurface {
+  GLuint texture = 0;
+  std::vector<uint32_t> buffer;
+};
+VrSubmitSurface Vr_submit_cinema;
+VrSubmitSurface Vr_submit_left;
+VrSubmitSurface Vr_submit_right;
 int Vr_menu_bitmap = -1;
 int Vr_menu_width = 0;
 int Vr_menu_height = 0;
 int Vr_menu_texture_size = 0;
+
+void VR_DeleteSubmitSurface(VrSubmitSurface &surface);
 
 constexpr float kPi = 3.14159265358979323846f;
 
@@ -171,30 +180,62 @@ void VR_EnsureSubmitTexture() {
     return;
   }
 
-  if (Vr_submit_texture != 0 && Vr_submit_width == target_w && Vr_submit_height == target_h) {
+  if (Vr_submit_width == target_w && Vr_submit_height == target_h) {
     return;
   }
 
-  if (Vr_submit_texture != 0) {
-    gl.delete_textures(1, &Vr_submit_texture);
-    Vr_submit_texture = 0;
+  if (Vr_submit_width != 0 || Vr_submit_height != 0) {
+    VR_DeleteSubmitSurface(Vr_submit_cinema);
+    VR_DeleteSubmitSurface(Vr_submit_left);
+    VR_DeleteSubmitSurface(Vr_submit_right);
   }
-
-  gl.gen_textures(1, &Vr_submit_texture);
-  gl.bind_texture(GL_TEXTURE_2D, Vr_submit_texture);
-  gl.tex_parameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  gl.tex_parameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  gl.tex_parameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  gl.tex_parameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  gl.tex_image_2d(GL_TEXTURE_2D, 0, GL_RGBA8, target_w, target_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
   Vr_submit_width = target_w;
   Vr_submit_height = target_h;
-  Vr_submit_buffer.resize(static_cast<size_t>(target_w) * static_cast<size_t>(target_h));
 }
 
-void VR_UpdateSubmitTexture(const NewBitmap &screenshot) {
-  if (!Vr_openvr_ready || Vr_submit_texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
+void VR_DeleteSubmitSurface(VrSubmitSurface &surface) {
+  auto &gl = VR_GetGlFns();
+  if (surface.texture != 0) {
+    if (gl.delete_textures) {
+      gl.delete_textures(1, &surface.texture);
+    }
+    surface.texture = 0;
+  }
+  surface.buffer.clear();
+}
+
+bool VR_EnsureSubmitSurface(VrSubmitSurface &surface) {
+  if (Vr_submit_width == 0 || Vr_submit_height == 0) {
+    return false;
+  }
+
+  auto &gl = VR_GetGlFns();
+  if (!gl.gen_textures || !gl.bind_texture || !gl.tex_parameteri || !gl.tex_image_2d || !gl.delete_textures) {
+    return false;
+  }
+
+  if (surface.texture == 0) {
+    gl.gen_textures(1, &surface.texture);
+    gl.bind_texture(GL_TEXTURE_2D, surface.texture);
+    gl.tex_parameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    gl.tex_parameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    gl.tex_parameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    gl.tex_parameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    gl.tex_image_2d(GL_TEXTURE_2D, 0, GL_RGBA8, Vr_submit_width, Vr_submit_height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                    nullptr);
+  }
+
+  const size_t desired_size = static_cast<size_t>(Vr_submit_width) * static_cast<size_t>(Vr_submit_height);
+  if (surface.buffer.size() != desired_size) {
+    surface.buffer.assign(desired_size, 0);
+  }
+
+  return surface.texture != 0;
+}
+
+void VR_UpdateSubmitSurface(const NewBitmap &screenshot, VrSubmitSurface &surface, bool allow_stereo_crop) {
+  if (!Vr_openvr_ready || surface.texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
     return;
   }
 
@@ -210,8 +251,8 @@ void VR_UpdateSubmitTexture(const NewBitmap &screenshot) {
   if (!src_data) {
     return;
   }
-  const bool stereo_side_by_side = (src_h > 0) && (src_w >= src_h * 2);
-  const bool stereo_top_bottom = (src_w > 0) && (src_h >= src_w * 2);
+  const bool stereo_side_by_side = allow_stereo_crop && (src_h > 0) && (src_w >= src_h * 2);
+  const bool stereo_top_bottom = allow_stereo_crop && (src_w > 0) && (src_h >= src_w * 2);
   const uint32_t sample_width = stereo_side_by_side ? (src_w / 2) : src_w;
   const uint32_t sample_height = stereo_top_bottom ? (src_h / 2) : src_h;
 
@@ -220,13 +261,13 @@ void VR_UpdateSubmitTexture(const NewBitmap &screenshot) {
     for (uint32_t x = 0; x < Vr_submit_width; ++x) {
       const uint32_t src_x = (x * sample_width) / Vr_submit_width;
       const uint32_t spix = src_data[src_y * src_w + src_x];
-      Vr_submit_buffer[y * Vr_submit_width + x] = spix;
+      surface.buffer[y * Vr_submit_width + x] = spix;
     }
   }
 
-  gl.bind_texture(GL_TEXTURE_2D, Vr_submit_texture);
+  gl.bind_texture(GL_TEXTURE_2D, surface.texture);
   gl.tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, Vr_submit_width, Vr_submit_height, GL_RGBA, GL_UNSIGNED_BYTE,
-                      Vr_submit_buffer.data());
+                      surface.buffer.data());
 }
 
 void VR_UpdateOpenVRPoses() {
@@ -295,7 +336,8 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
 } // namespace
 
 void VR_InitFromCommandLine() {
-  Vr_enabled = FindArg("-vr") != 0;
+  Vr_enabled = FindArg("-vr") != 0 || FindArg("-vrstereo") != 0;
+  Vr_render_mode = FindArg("-vrstereo") ? VrRenderMode::Stereo : VrRenderMode::Cinema;
   if (!Vr_enabled) {
     return;
   }
@@ -315,16 +357,38 @@ void VR_InitFromCommandLine() {
     Vr_openvr_ready = false;
   }
 
+  if (Vr_system) {
+    auto left = Vr_system->GetEyeToHeadTransform(vr::Eye_Left);
+    auto right = Vr_system->GetEyeToHeadTransform(vr::Eye_Right);
+    const float separation = std::fabs(right.m[0][3] - left.m[0][3]);
+    if (separation > 0.0f) {
+      Vr_eye_separation = separation;
+    }
+  }
+
   if (Vr_openvr_ready) {
     uint32_t target_w = 0;
     uint32_t target_h = 0;
     Vr_system->GetRecommendedRenderTargetSize(&target_w, &target_h);
-    LOG_INFO.printf("OpenVR enabled via -vr. Recommended render target %ux%u.", target_w, target_h);
+    const char *mode_label = (Vr_render_mode == VrRenderMode::Stereo) ? "stereo" : "cinema";
+    LOG_INFO.printf("OpenVR enabled via -vr (%s). Recommended render target %ux%u.", mode_label, target_w, target_h);
   }
 }
 
 bool VR_IsEnabled() {
   return Vr_enabled;
+}
+
+VrRenderMode VR_GetRenderMode() {
+  return Vr_render_mode;
+}
+
+bool VR_IsStereoRendering() {
+  return Vr_enabled && Vr_render_mode == VrRenderMode::Stereo;
+}
+
+float VR_GetStereoEyeSeparation() {
+  return Vr_enabled ? Vr_eye_separation : 0.0f;
 }
 
 void VR_RenderMenuFrame() {
@@ -338,7 +402,7 @@ void VR_RenderMenuFrame() {
 
   VR_UpdateOpenVRPoses();
   VR_EnsureSubmitTexture();
-  if (Vr_submit_texture == 0) {
+  if (Vr_submit_width == 0 || Vr_submit_height == 0) {
     return;
   }
 
@@ -350,7 +414,18 @@ void VR_RenderMenuFrame() {
   auto screenshot = rend_Screenshot();
   if (screenshot && screenshot->getData()) {
     VR_UpdateMenuTexture(*screenshot);
-    VR_UpdateSubmitTexture(*screenshot);
+    if (Vr_render_mode == VrRenderMode::Stereo) {
+      if (!VR_EnsureSubmitSurface(Vr_submit_left) || !VR_EnsureSubmitSurface(Vr_submit_right)) {
+        return;
+      }
+      VR_UpdateSubmitSurface(*screenshot, Vr_submit_left, true);
+      VR_UpdateSubmitSurface(*screenshot, Vr_submit_right, true);
+    } else {
+      if (!VR_EnsureSubmitSurface(Vr_submit_cinema)) {
+        return;
+      }
+      VR_UpdateSubmitSurface(*screenshot, Vr_submit_cinema, true);
+    }
   }
 
   StartFrame(0, 0, Max_window_w, Max_window_h);
@@ -367,11 +442,54 @@ void VR_RenderMenuFrame() {
   g3_EndFrame();
   EndFrame();
 
-  if (Vr_openvr_ready && Vr_submit_texture != 0 && vr::VRCompositor()) {
-    vr::Texture_t texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_texture)),
-                             vr::TextureType_OpenGL, vr::ColorSpace_Auto};
-    vr::VRCompositor()->Submit(vr::Eye_Left, &texture);
-    vr::VRCompositor()->Submit(vr::Eye_Right, &texture);
+  if (Vr_openvr_ready && vr::VRCompositor()) {
+    if (Vr_render_mode == VrRenderMode::Stereo) {
+      if (Vr_submit_left.texture != 0 && Vr_submit_right.texture != 0) {
+        vr::Texture_t left_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
+                                      vr::TextureType_OpenGL, vr::ColorSpace_Auto};
+        vr::Texture_t right_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_right.texture)),
+                                       vr::TextureType_OpenGL, vr::ColorSpace_Auto};
+        vr::VRCompositor()->Submit(vr::Eye_Left, &left_texture);
+        vr::VRCompositor()->Submit(vr::Eye_Right, &right_texture);
+      }
+    } else if (Vr_submit_cinema.texture != 0) {
+      vr::Texture_t texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_cinema.texture)),
+                               vr::TextureType_OpenGL, vr::ColorSpace_Auto};
+      vr::VRCompositor()->Submit(vr::Eye_Left, &texture);
+      vr::VRCompositor()->Submit(vr::Eye_Right, &texture);
+    }
+  }
+}
+
+void VR_SubmitStereoFrame(const NewBitmap &left, const NewBitmap &right) {
+  if (!VR_IsStereoRendering()) {
+    return;
+  }
+
+  if (!Vr_openvr_ready || !Vr_system || Renderer_type != RENDERER_OPENGL) {
+    return;
+  }
+
+  VR_UpdateOpenVRPoses();
+  VR_EnsureSubmitTexture();
+  if (Vr_submit_width == 0 || Vr_submit_height == 0) {
+    return;
+  }
+
+  if (!VR_EnsureSubmitSurface(Vr_submit_left) || !VR_EnsureSubmitSurface(Vr_submit_right)) {
+    return;
+  }
+
+  VR_UpdateSubmitSurface(left, Vr_submit_left, false);
+  VR_UpdateSubmitSurface(right, Vr_submit_right, false);
+
+  if (Vr_openvr_ready && vr::VRCompositor()) {
+    vr::Texture_t left_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
+                                  vr::TextureType_OpenGL, vr::ColorSpace_Auto};
+    vr::Texture_t right_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_right.texture)),
+                                   vr::TextureType_OpenGL, vr::ColorSpace_Auto};
+    vr::VRCompositor()->Submit(vr::Eye_Left, &left_texture);
+    vr::VRCompositor()->Submit(vr::Eye_Right, &right_texture);
   }
 }
 
@@ -380,16 +498,11 @@ void VR_ResetGraphicsResources() {
     return;
   }
 
-  auto &gl = VR_GetGlFns();
-  if (Vr_submit_texture != 0) {
-    if (gl.delete_textures) {
-      gl.delete_textures(1, &Vr_submit_texture);
-    }
-    Vr_submit_texture = 0;
-  }
+  VR_DeleteSubmitSurface(Vr_submit_cinema);
+  VR_DeleteSubmitSurface(Vr_submit_left);
+  VR_DeleteSubmitSurface(Vr_submit_right);
   Vr_submit_width = 0;
   Vr_submit_height = 0;
-  Vr_submit_buffer.clear();
 
   if (Vr_menu_bitmap >= 0) {
     bm_FreeBitmap(Vr_menu_bitmap);
@@ -401,16 +514,11 @@ void VR_ResetGraphicsResources() {
 }
 
 void VR_Shutdown() {
-  auto &gl = VR_GetGlFns();
-  if (Vr_submit_texture != 0) {
-    if (gl.delete_textures) {
-      gl.delete_textures(1, &Vr_submit_texture);
-    }
-    Vr_submit_texture = 0;
-  }
+  VR_DeleteSubmitSurface(Vr_submit_cinema);
+  VR_DeleteSubmitSurface(Vr_submit_left);
+  VR_DeleteSubmitSurface(Vr_submit_right);
   Vr_submit_width = 0;
   Vr_submit_height = 0;
-  Vr_submit_buffer.clear();
   if (Vr_system) {
     vr::VR_Shutdown();
     Vr_system = nullptr;

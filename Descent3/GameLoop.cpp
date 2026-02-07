@@ -858,6 +858,8 @@
 #include "gamesave.h"
 #include "spew.h"
 #include "grtext.h"
+#include "renderer.h"
+#include "vr.h"
 #include "gamefont.h"
 #include "renderobject.h"
 #include "buddymenu.h"
@@ -2489,9 +2491,6 @@ void GameDrawMainView() {
   bool rear_view = 0;
   object *save_view;
 
-  // Start rendering
-  StartFrame(false);
-
   // Set guided view
   if (!Cinematic_inuse && Players[Player_num].guided_obj != NULL && !Guided_missile_smallview) {
     save_view = Viewer_object;
@@ -2502,25 +2501,57 @@ void GameDrawMainView() {
 
   // Draw the world
   Rendering_main_view = true;
-  GameRenderWorld(Viewer_object, &Viewer_object->pos, Viewer_object->roomnum, &Viewer_object->orient, Render_zoom,
-                  rear_view);
+  if (VR_IsEnabled() && VR_IsStereoRendering()) {
+    matrix view_orient = Viewer_object->orient;
+    matrix saved_orient;
+    bool restore_viewer = false;
+    if (rear_view) {
+      view_orient.fvec = -view_orient.fvec;
+      view_orient.rvec = -view_orient.rvec;
+      if (Viewer_object) {
+        saved_orient = Viewer_object->orient;
+        Viewer_object->orient = view_orient;
+        restore_viewer = true;
+      }
+    }
+
+    const float eye_offset = VR_GetStereoEyeSeparation() * 0.5f;
+    auto render_eye = [&](float eye_sign) {
+      vector eye_pos = Viewer_object->pos + (view_orient.rvec * (eye_sign * eye_offset));
+      StartFrame(false);
+      rend_ClearScreen(GR_BLACK);
+      GameRenderWorld(Viewer_object, &eye_pos, Viewer_object->roomnum, &view_orient, Render_zoom, false);
+      DoMatcensRenderFrame();
+      ProcessRenderEvents();
+      EndFrame();
+      return rend_Screenshot();
+    };
+
+    auto left = render_eye(-1.0f);
+    auto right = render_eye(1.0f);
+    if (restore_viewer) {
+      Viewer_object->orient = saved_orient;
+    }
+    if (left && right) {
+      VR_SubmitStereoFrame(*left, *right);
+    }
+    DoRoomChangeFrame();
+  } else {
+    // Start rendering
+    StartFrame(false);
+    GameRenderWorld(Viewer_object, &Viewer_object->pos, Viewer_object->roomnum, &Viewer_object->orient, Render_zoom,
+                    rear_view);
+    DoRoomChangeFrame();
+    DoMatcensRenderFrame();
+    ProcessRenderEvents();
+    EndFrame();
+  }
   Rendering_main_view = false;
 
   // Restore viewer object if guided
   if (!Cinematic_inuse && Players[Player_num].guided_obj != NULL && !Guided_missile_smallview)
     Viewer_object = save_view;
 
-  // Room changes
-  DoRoomChangeFrame();
-
-  // Draw Matcen Effects
-  DoMatcensRenderFrame();
-
-  // Draw any render events
-  ProcessRenderEvents();
-
-  // We're done with this window
-  EndFrame();
 }
 
 // Added by Samir
