@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 #include "3d.h"
 #include "args.h"
@@ -28,6 +29,7 @@
 #include "game.h"
 #include "log.h"
 #include "NewBitmap.h"
+#include "dyna_gl.h"
 #include "openvr.h"
 #include "renderer.h"
 #include "vecmat.h"
@@ -36,6 +38,10 @@ namespace {
 bool Vr_enabled = false;
 bool Vr_openvr_ready = false;
 vr::IVRSystem *Vr_system = nullptr;
+GLuint Vr_submit_texture = 0;
+uint32_t Vr_submit_width = 0;
+uint32_t Vr_submit_height = 0;
+std::vector<uint32_t> Vr_submit_buffer;
 int Vr_menu_bitmap = -1;
 int Vr_menu_width = 0;
 int Vr_menu_height = 0;
@@ -75,15 +81,13 @@ void VR_EnsureMenuBitmap() {
   }
 }
 
-void VR_UpdateMenuTexture() {
-  auto screenshot = rend_Screenshot();
-  if (!screenshot || !screenshot->getData()) {
+void VR_UpdateMenuTexture(const NewBitmap &screenshot) {
+  uint32_t w, h;
+  screenshot.getSize(w, h);
+  auto *src_data = reinterpret_cast<uint32_t *>(screenshot.getData());
+  if (!src_data) {
     return;
   }
-
-  uint32_t w, h;
-  screenshot->getSize(w, h);
-  auto *src_data = reinterpret_cast<uint32_t *>(screenshot->getData());
   uint16_t *dest_data = bm_data(Vr_menu_bitmap, 0);
   if (!dest_data) {
     return;
@@ -103,6 +107,67 @@ void VR_UpdateMenuTexture() {
       dest_data[((dest_size - 1) - y) * dest_size + x] = pixel;
     }
   }
+}
+
+void VR_EnsureSubmitTexture() {
+  if (!Vr_openvr_ready || !Vr_system || Renderer_type != RENDERER_OPENGL) {
+    return;
+  }
+
+  uint32_t target_w = 0;
+  uint32_t target_h = 0;
+  Vr_system->GetRecommendedRenderTargetSize(&target_w, &target_h);
+  if (target_w == 0 || target_h == 0) {
+    return;
+  }
+
+  if (Vr_submit_texture != 0 && Vr_submit_width == target_w && Vr_submit_height == target_h) {
+    return;
+  }
+
+  if (Vr_submit_texture != 0) {
+    dglDeleteTextures(1, &Vr_submit_texture);
+    Vr_submit_texture = 0;
+  }
+
+  dglGenTextures(1, &Vr_submit_texture);
+  dglBindTexture(GL_TEXTURE_2D, Vr_submit_texture);
+  dglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  dglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  dglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  dglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  dglTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, target_w, target_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+  Vr_submit_width = target_w;
+  Vr_submit_height = target_h;
+  Vr_submit_buffer.resize(static_cast<size_t>(target_w) * static_cast<size_t>(target_h));
+}
+
+void VR_UpdateSubmitTexture(const NewBitmap &screenshot) {
+  if (!Vr_openvr_ready || Vr_submit_texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
+    return;
+  }
+
+  uint32_t src_w = 0;
+  uint32_t src_h = 0;
+  screenshot.getSize(src_w, src_h);
+  auto *src_data = reinterpret_cast<uint32_t *>(screenshot.getData());
+  if (!src_data) {
+    return;
+  }
+
+  for (uint32_t y = 0; y < Vr_submit_height; ++y) {
+    const uint32_t src_y = (y * src_h) / Vr_submit_height;
+    for (uint32_t x = 0; x < Vr_submit_width; ++x) {
+      const uint32_t src_x = (x * src_w) / Vr_submit_width;
+      const uint32_t spix = src_data[src_y * src_w + src_x];
+      Vr_submit_buffer[((Vr_submit_height - 1) - y) * Vr_submit_width + x] = spix;
+    }
+  }
+
+  dglBindTexture(GL_TEXTURE_2D, Vr_submit_texture);
+  dglTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, Vr_submit_width, Vr_submit_height, GL_RGBA, GL_UNSIGNED_BYTE,
+                   Vr_submit_buffer.data());
 }
 
 void VR_UpdateOpenVRPoses() {
@@ -209,13 +274,18 @@ void VR_RenderMenuFrame() {
   }
 
   VR_UpdateOpenVRPoses();
+  VR_EnsureSubmitTexture();
 
   VR_EnsureMenuBitmap();
   if (Vr_menu_bitmap < 0) {
     return;
   }
 
-  VR_UpdateMenuTexture();
+  auto screenshot = rend_Screenshot();
+  if (screenshot && screenshot->getData()) {
+    VR_UpdateMenuTexture(*screenshot);
+    VR_UpdateSubmitTexture(*screenshot);
+  }
 
   StartFrame(0, 0, Max_window_w, Max_window_h);
   rend_ClearScreen(GR_BLACK);
@@ -230,9 +300,23 @@ void VR_RenderMenuFrame() {
 
   g3_EndFrame();
   EndFrame();
+
+  if (Vr_openvr_ready && Vr_submit_texture != 0 && vr::VRCompositor()) {
+    vr::Texture_t texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_texture)),
+                             vr::TextureType_OpenGL, vr::ColorSpace_Auto};
+    vr::VRCompositor()->Submit(vr::Eye_Left, &texture);
+    vr::VRCompositor()->Submit(vr::Eye_Right, &texture);
+  }
 }
 
 void VR_Shutdown() {
+  if (Vr_submit_texture != 0) {
+    dglDeleteTextures(1, &Vr_submit_texture);
+    Vr_submit_texture = 0;
+  }
+  Vr_submit_width = 0;
+  Vr_submit_height = 0;
+  Vr_submit_buffer.clear();
   if (Vr_system) {
     vr::VR_Shutdown();
     Vr_system = nullptr;
