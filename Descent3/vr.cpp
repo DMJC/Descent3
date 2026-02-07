@@ -27,6 +27,7 @@
 #include "bitmap.h"
 #include "descent.h"
 #include "game.h"
+#include "gamesequence.h"
 #include "log.h"
 #include "NewBitmap.h"
 #include "../renderer/dyna_gl.h"
@@ -387,7 +388,7 @@ VrRenderMode VR_GetRenderMode() {
 }
 
 bool VR_IsStereoRendering() {
-  return Vr_enabled && (Vr_render_mode == VrRenderMode::Stereo || (Game_mode & GM_NORMAL));
+  return Vr_enabled && (Vr_render_mode == VrRenderMode::Stereo || GetGameState() == GAMESTATE_LVLPLAYING);
 }
 
 float VR_GetStereoEyeSeparation() {
