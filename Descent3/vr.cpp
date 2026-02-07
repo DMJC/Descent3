@@ -151,7 +151,11 @@ void VR_EnsureSubmitTexture() {
 
   auto &gl = VR_GetGlFns();
   if (!gl.gen_textures || !gl.bind_texture || !gl.tex_parameteri || !gl.tex_image_2d || !gl.delete_textures) {
-    LOG_WARNING << "OpenVR: Missing GL entry points for texture submission.";
+    static bool missing_gl_warned = false;
+    if (!missing_gl_warned) {
+      LOG_WARNING << "OpenVR: Missing GL entry points for texture submission.";
+      missing_gl_warned = true;
+    }
     return;
   }
 
@@ -277,7 +281,6 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
     points[3].p3_v = v_max;
 
     g3_DrawPoly(4, point_list, texture_handle);
-    LOG_WARNING.printf("Cinema Screen");
   }
 }
 } // namespace
