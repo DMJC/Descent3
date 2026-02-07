@@ -2518,17 +2518,13 @@ void GameDrawMainView() {
 
     const float eye_offset = VR_GetStereoEyeSeparation() * 0.5f;
     auto render_eye = [&](float eye_sign) {
-      vector original_pos = Viewer_object->pos;
-      vector eye_shift = view_orient.rvec * (eye_sign * eye_offset);
-      Viewer_object->pos = original_pos + eye_shift;
-      vector eye_pos = Viewer_object->pos;
+      vector eye_pos = Viewer_object->pos + (view_orient.rvec * (eye_sign * eye_offset));
       StartFrame(false);
       rend_ClearScreen(GR_BLACK);
       GameRenderWorld(Viewer_object, &eye_pos, Viewer_object->roomnum, &view_orient, Render_zoom, false);
       DoMatcensRenderFrame();
       ProcessRenderEvents();
       EndFrame();
-      Viewer_object->pos = original_pos;
       return rend_Screenshot();
     };
 
