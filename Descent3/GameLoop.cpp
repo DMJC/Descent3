@@ -2519,7 +2519,7 @@ void GameDrawMainView() {
     }
 
     constexpr float kHudRenderZoom = 0.56f;
-    constexpr float kToeInConvergenceDistance = 20.0f;
+    constexpr float kToeInConvergenceDistance = 2.0f;
     constexpr float kPi = 3.141592654f;
     constexpr float kAngleScale = 65536.0f / (2.0f * kPi);
     const float eye_offset = VR_GetStereoEyeSeparation() * 0.5f;
