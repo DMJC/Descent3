@@ -428,8 +428,6 @@ void VR_RenderMenuFrame() {
   VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max);
 
   g3_EndFrame();
-  EndFrame();
-
   auto curved_frame = rend_Screenshot();
   if (curved_frame && curved_frame->getData()) {
     if (Vr_render_mode == VrRenderMode::Stereo) {
@@ -445,6 +443,8 @@ void VR_RenderMenuFrame() {
       VR_UpdateSubmitSurface(*curved_frame, Vr_submit_cinema, false);
     }
   }
+
+  EndFrame();
 
   if (Vr_openvr_ready && vr::VRCompositor()) {
     if (Vr_render_mode == VrRenderMode::Stereo) {
