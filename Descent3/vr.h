@@ -20,6 +20,8 @@
 #define D3_VR_H
 
 class NewBitmap;
+struct matrix;
+struct vector;
 
 enum class VrRenderMode {
   Cinema,
@@ -31,6 +33,7 @@ bool VR_IsEnabled();
 VrRenderMode VR_GetRenderMode();
 bool VR_IsStereoRendering();
 float VR_GetStereoEyeSeparation();
+bool VR_GetEyePose(bool left_eye, vector &offset, matrix &orientation);
 void VR_RenderMenuFrame();
 void VR_SubmitStereoFrame(const NewBitmap &left, const NewBitmap &right);
 void VR_ResetGraphicsResources();

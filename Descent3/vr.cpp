@@ -391,6 +391,25 @@ float VR_GetStereoEyeSeparation() {
   return Vr_enabled ? Vr_eye_separation : 0.0f;
 }
 
+bool VR_GetEyePose(bool left_eye, vector &offset, matrix &orientation) {
+  if (!Vr_openvr_ready || !Vr_system) {
+    return false;
+  }
+
+  const vr::HmdMatrix34_t eye_to_head =
+      Vr_system->GetEyeToHeadTransform(left_eye ? vr::Eye_Left : vr::Eye_Right);
+
+  orientation.rvec = {eye_to_head.m[0][0], eye_to_head.m[1][0], eye_to_head.m[2][0]};
+  orientation.uvec = {eye_to_head.m[0][1], eye_to_head.m[1][1], eye_to_head.m[2][1]};
+  orientation.fvec = {eye_to_head.m[0][2], eye_to_head.m[1][2], eye_to_head.m[2][2]};
+
+  vector translation = {eye_to_head.m[0][3], eye_to_head.m[1][3], eye_to_head.m[2][3]};
+  vm_MatrixMulVector(&offset, &translation, &orientation);
+  offset = -offset;
+
+  return true;
+}
+
 void VR_RenderMenuFrame() {
   if (!Vr_enabled) {
     return;
