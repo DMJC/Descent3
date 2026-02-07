@@ -139,7 +139,7 @@ void VR_UpdateMenuTexture(const NewBitmap &screenshot) {
         const int b = (spix >> 16) & 0xff;
         pixel = GR_RGB16(r, g, b);
       }
-      dest_data[y * dest_size + x] = pixel;
+      dest_data[((dest_size - 1) - y) * dest_size + x] = pixel;
     }
   }
 }
@@ -207,7 +207,7 @@ bool VR_UpdateSubmitTexture(const NewBitmap &screenshot) {
     for (uint32_t x = 0; x < Vr_submit_width; ++x) {
       const uint32_t src_x = (x * src_w) / Vr_submit_width;
       const uint32_t spix = src_data[src_y * src_w + src_x];
-      Vr_submit_buffer[y * Vr_submit_width + x] = spix;
+      Vr_submit_buffer[((Vr_submit_height - 1) - y) * Vr_submit_width + x] = spix;
     }
   }
 
@@ -269,13 +269,13 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
     points[3].p3_flags |= PF_UV;
 
     points[0].p3_u = u0 * u_max;
-    points[0].p3_v = v_max;
+    points[0].p3_v = 0.0f;
     points[1].p3_u = u1 * u_max;
-    points[1].p3_v = v_max;
+    points[1].p3_v = 0.0f;
     points[2].p3_u = u1 * u_max;
-    points[2].p3_v = 0.0f;
+    points[2].p3_v = v_max;
     points[3].p3_u = u0 * u_max;
-    points[3].p3_v = 0.0f;
+    points[3].p3_v = v_max;
 
     g3_DrawPoly(4, point_list, texture_handle);
   }
