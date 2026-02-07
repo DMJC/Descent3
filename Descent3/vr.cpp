@@ -387,7 +387,7 @@ VrRenderMode VR_GetRenderMode() {
 }
 
 bool VR_IsStereoRendering() {
-  return Vr_enabled && Vr_render_mode == VrRenderMode::Stereo;
+  return Vr_enabled && (Vr_render_mode == VrRenderMode::Stereo || (Game_mode & GM_NORMAL));
 }
 
 float VR_GetStereoEyeSeparation() {
