@@ -356,6 +356,31 @@ void VR_RenderMenuFrame() {
   }
 }
 
+void VR_ResetGraphicsResources() {
+  if (!Vr_enabled) {
+    return;
+  }
+
+  auto &gl = VR_GetGlFns();
+  if (Vr_submit_texture != 0) {
+    if (gl.delete_textures) {
+      gl.delete_textures(1, &Vr_submit_texture);
+    }
+    Vr_submit_texture = 0;
+  }
+  Vr_submit_width = 0;
+  Vr_submit_height = 0;
+  Vr_submit_buffer.clear();
+
+  if (Vr_menu_bitmap >= 0) {
+    bm_FreeBitmap(Vr_menu_bitmap);
+    Vr_menu_bitmap = -1;
+  }
+  Vr_menu_width = 0;
+  Vr_menu_height = 0;
+  Vr_menu_texture_size = 0;
+}
+
 void VR_Shutdown() {
   auto &gl = VR_GetGlFns();
   if (Vr_submit_texture != 0) {

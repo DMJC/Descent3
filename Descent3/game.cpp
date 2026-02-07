@@ -689,6 +689,7 @@
 #include "slew.h"
 #include "SmallViews.h"
 #include "stringtable.h"
+#include "vr.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 //	Variables
@@ -919,6 +920,8 @@ void SetScreenMode(int sm, bool force_res_change) {
 
   if (old_sm == sm && !force_res_change)
     return;
+
+  VR_ResetGraphicsResources();
 
   //	close down any systems previously opened and that must be closed (like software->hardware, etc.)
   //	make sure renderer is initialized

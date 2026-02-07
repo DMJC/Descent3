@@ -519,6 +519,7 @@
 #include "hlsoundlib.h"
 #include "soundload.h"
 #include "textaux.h"
+#include "vr.h"
 #include "pserror.h"
 #include "psrand.h"
 #include "controls.h"
@@ -1542,6 +1543,10 @@ void TelcomRenderScreen(bool poweron, bool powerup, uint8_t power_effect) {
 
   EndFrame();
   rend_Flip();
+
+  if (VR_IsEnabled() && Telcom_system.current_status == TS_MISSION) {
+    VR_RenderMenuFrame();
+  }
 
   Telcom_glitch_screen = false;
 }

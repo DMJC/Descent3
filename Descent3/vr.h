@@ -22,6 +22,7 @@
 void VR_InitFromCommandLine();
 bool VR_IsEnabled();
 void VR_RenderMenuFrame();
+void VR_ResetGraphicsResources();
 void VR_Shutdown();
 
 #endif
