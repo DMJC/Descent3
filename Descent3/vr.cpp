@@ -411,7 +411,7 @@ void VR_RenderMenuFrame() {
     return;
   }
 
-  auto screenshot = rend_Screenshot();
+  auto screenshot = rend_Screenshot(true);
   if (screenshot && screenshot->getData()) {
     VR_UpdateMenuTexture(*screenshot);
   }
