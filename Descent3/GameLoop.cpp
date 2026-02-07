@@ -2532,8 +2532,8 @@ void GameDrawMainView() {
       return rend_Screenshot();
     };
 
-    auto left = render_eye(-1.0f);
-    auto right = render_eye(1.0f);
+    auto left = render_eye(1.0f);
+    auto right = render_eye(-1.0f);
     if (restore_viewer) {
       Viewer_object->orient = saved_orient;
     }
