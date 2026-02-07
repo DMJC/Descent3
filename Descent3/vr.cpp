@@ -34,6 +34,7 @@
 #include "renderer.h"
 #include "vecmat.h"
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_opengl.h>
 
 namespace {
 bool Vr_enabled = false;
