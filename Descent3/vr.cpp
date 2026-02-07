@@ -206,7 +206,7 @@ bool VR_UpdateSubmitTexture(const NewBitmap &screenshot) {
     const uint32_t src_y = (y * src_h) / Vr_submit_height;
     for (uint32_t x = 0; x < Vr_submit_width; ++x) {
       const uint32_t src_x = (x * src_w) / Vr_submit_width;
-      const uint32_t spix = src_data[src_y * src_w + src_x];
+      const uint32_t spix = src_data[src_y * src_w + src_x] | 0xff000000u;
       Vr_submit_buffer[((Vr_submit_height - 1) - y) * Vr_submit_width + x] = spix;
     }
   }
