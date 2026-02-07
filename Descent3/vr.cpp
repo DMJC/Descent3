@@ -234,7 +234,8 @@ bool VR_EnsureSubmitSurface(VrSubmitSurface &surface) {
   return surface.texture != 0;
 }
 
-void VR_UpdateSubmitSurface(const NewBitmap &screenshot, VrSubmitSurface &surface, bool allow_stereo_crop) {
+void VR_UpdateSubmitSurface(const NewBitmap &screenshot, VrSubmitSurface &surface, bool allow_stereo_crop,
+                            int eye_index) {
   if (!Vr_openvr_ready || surface.texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
     return;
   }
@@ -255,11 +256,13 @@ void VR_UpdateSubmitSurface(const NewBitmap &screenshot, VrSubmitSurface &surfac
   const bool stereo_top_bottom = allow_stereo_crop && (src_w > 0) && (src_h >= src_w * 2);
   const uint32_t sample_width = stereo_side_by_side ? (src_w / 2) : src_w;
   const uint32_t sample_height = stereo_top_bottom ? (src_h / 2) : src_h;
+  const uint32_t offset_x = (stereo_side_by_side && eye_index == 1) ? sample_width : 0;
+  const uint32_t offset_y = (stereo_top_bottom && eye_index == 1) ? sample_height : 0;
 
   for (uint32_t y = 0; y < Vr_submit_height; ++y) {
-    const uint32_t src_y = (y * sample_height) / Vr_submit_height;
+    const uint32_t src_y = (y * sample_height) / Vr_submit_height + offset_y;
     for (uint32_t x = 0; x < Vr_submit_width; ++x) {
-      const uint32_t src_x = (x * sample_width) / Vr_submit_width;
+      const uint32_t src_x = (x * sample_width) / Vr_submit_width + offset_x;
       const uint32_t spix = src_data[src_y * src_w + src_x];
       surface.buffer[y * Vr_submit_width + x] = spix;
     }
@@ -418,13 +421,13 @@ void VR_RenderMenuFrame() {
       if (!VR_EnsureSubmitSurface(Vr_submit_left) || !VR_EnsureSubmitSurface(Vr_submit_right)) {
         return;
       }
-      VR_UpdateSubmitSurface(*screenshot, Vr_submit_left, true);
-      VR_UpdateSubmitSurface(*screenshot, Vr_submit_right, true);
+      VR_UpdateSubmitSurface(*screenshot, Vr_submit_left, true, 0);
+      VR_UpdateSubmitSurface(*screenshot, Vr_submit_right, true, 1);
     } else {
       if (!VR_EnsureSubmitSurface(Vr_submit_cinema)) {
         return;
       }
-      VR_UpdateSubmitSurface(*screenshot, Vr_submit_cinema, true);
+      VR_UpdateSubmitSurface(*screenshot, Vr_submit_cinema, true, 0);
     }
   }
 
@@ -480,8 +483,8 @@ void VR_SubmitStereoFrame(const NewBitmap &left, const NewBitmap &right) {
     return;
   }
 
-  VR_UpdateSubmitSurface(left, Vr_submit_left, false);
-  VR_UpdateSubmitSurface(right, Vr_submit_right, false);
+  VR_UpdateSubmitSurface(left, Vr_submit_left, false, 0);
+  VR_UpdateSubmitSurface(right, Vr_submit_right, false, 1);
 
   if (Vr_openvr_ready && vr::VRCompositor()) {
     vr::Texture_t left_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
