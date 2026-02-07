@@ -418,7 +418,7 @@ void VR_RenderMenuFrame() {
   auto screenshot = rend_Screenshot();
   if (screenshot && screenshot->getData()) {
     VR_UpdateMenuTexture(*screenshot);
-    if (Vr_render_mode == VrRenderMode::Stereo) {
+    if (VR_IsStereoRendering()) {
       if (!VR_EnsureSubmitSurface(Vr_submit_left) || !VR_EnsureSubmitSurface(Vr_submit_right)) {
         return;
       }
@@ -447,7 +447,7 @@ void VR_RenderMenuFrame() {
   EndFrame();
 
   if (Vr_openvr_ready && vr::VRCompositor()) {
-    if (Vr_render_mode == VrRenderMode::Stereo) {
+    if (VR_IsStereoRendering()) {
       if (Vr_submit_left.texture != 0 && Vr_submit_right.texture != 0) {
         vr::Texture_t left_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
                                       vr::TextureType_OpenGL, vr::ColorSpace_Auto};
