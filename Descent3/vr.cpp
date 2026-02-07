@@ -283,7 +283,7 @@ void VR_UpdateOpenVRPoses() {
   vr::VRCompositor()->WaitGetPoses(poses, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
 }
 
-void VR_DrawCinemaScreen(int /*texture_handle*/, float /*u_max*/, float /*v_max*/) {
+void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
   constexpr int kSegments = 32;
   constexpr float kArcDegrees = 100.0f;
   constexpr float kRadius = 6.0f;
@@ -295,11 +295,10 @@ void VR_DrawCinemaScreen(int /*texture_handle*/, float /*u_max*/, float /*v_max*
   const float half_height = kHeight * 0.5f;
 
   rend_SetZBufferState(0);
-  rend_SetTextureType(TT_FLAT);
+  rend_SetTextureType(TT_LINEAR);
   rend_SetLighting(LS_NONE);
-  rend_SetColorModel(CM_RGB);
-  rend_SetFlatColor(GR_BLACK);
-  rend_SetAlphaType(AT_ALWAYS);
+  rend_SetAlphaType(AT_CONSTANT_TEXTURE);
+  rend_SetAlphaValue(255);
 
   for (int i = 0; i < kSegments; ++i) {
     const float a0 = start_angle + (delta * i);
@@ -318,7 +317,24 @@ void VR_DrawCinemaScreen(int /*texture_handle*/, float /*u_max*/, float /*v_max*
     g3_RotatePoint(&points[2], &p2);
     g3_RotatePoint(&points[3], &p3);
 
-    g3_DrawPoly(4, point_list, 0);
+    const float u0 = static_cast<float>(i) / static_cast<float>(kSegments);
+    const float u1 = static_cast<float>(i + 1) / static_cast<float>(kSegments);
+
+    points[0].p3_flags |= PF_UV;
+    points[1].p3_flags |= PF_UV;
+    points[2].p3_flags |= PF_UV;
+    points[3].p3_flags |= PF_UV;
+
+    points[0].p3_u = u0 * u_max;
+    points[0].p3_v = 0.0f;
+    points[1].p3_u = u1 * u_max;
+    points[1].p3_v = 0.0f;
+    points[2].p3_u = u1 * u_max;
+    points[2].p3_v = v_max;
+    points[3].p3_u = u0 * u_max;
+    points[3].p3_v = v_max;
+
+    g3_DrawPoly(4, point_list, texture_handle);
   }
 }
 } // namespace
@@ -402,23 +418,38 @@ void VR_RenderMenuFrame() {
   auto screenshot = rend_Screenshot();
   if (screenshot && screenshot->getData()) {
     VR_UpdateMenuTexture(*screenshot);
-    if (VR_IsStereoRendering()) {
-      if (!VR_EnsureSubmitSurface(Vr_submit_left) || !VR_EnsureSubmitSurface(Vr_submit_right)) {
-        return;
-      }
-      VR_UpdateSubmitSurface(*screenshot, Vr_submit_left, true, 0);
-      VR_UpdateSubmitSurface(*screenshot, Vr_submit_right, true, 1);
-    } else {
-      if (!VR_EnsureSubmitSurface(Vr_submit_cinema)) {
-        return;
-      }
-      VR_UpdateSubmitSurface(*screenshot, Vr_submit_cinema, true, 0);
-    }
   }
 
   StartFrame(0, 0, Max_window_w, Max_window_h);
   rend_ClearScreen(GR_BLACK);
 
+  vector view_pos{0.0f, 0.0f, 0.0f};
+  matrix view_orient = Identity_matrix;
+  g3_StartFrame(&view_pos, &view_orient, D3_DEFAULT_ZOOM);
+
+  const float u_max = static_cast<float>(Vr_menu_width) / static_cast<float>(Vr_menu_texture_size);
+  const float v_max = static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
+  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max);
+
+  g3_EndFrame();
+
+  auto curved_screenshot = rend_Screenshot();
+  if (curved_screenshot && curved_screenshot->getData()) {
+    if (VR_IsStereoRendering()) {
+      if (!VR_EnsureSubmitSurface(Vr_submit_left) || !VR_EnsureSubmitSurface(Vr_submit_right)) {
+        return;
+      }
+      VR_UpdateSubmitSurface(*curved_screenshot, Vr_submit_left, false, 0);
+      VR_UpdateSubmitSurface(*curved_screenshot, Vr_submit_right, false, 1);
+    } else {
+      if (!VR_EnsureSubmitSurface(Vr_submit_cinema)) {
+        return;
+      }
+      VR_UpdateSubmitSurface(*curved_screenshot, Vr_submit_cinema, false, 0);
+    }
+  }
+
+  rend_ClearScreen(GR_BLACK);
   EndFrame();
 
   if (Vr_openvr_ready && vr::VRCompositor()) {
