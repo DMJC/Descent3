@@ -27,6 +27,7 @@
 #include "descent.h"
 #include "game.h"
 #include "log.h"
+#include "NewBitmap.h"
 #include "renderer.h"
 #include "vecmat.h"
 
