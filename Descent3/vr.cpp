@@ -323,8 +323,15 @@ void VR_RenderMenuFrame() {
     return;
   }
 
+  if (!Vr_openvr_ready || !Vr_system || Renderer_type != RENDERER_OPENGL) {
+    return;
+  }
+
   VR_UpdateOpenVRPoses();
   VR_EnsureSubmitTexture();
+  if (Vr_submit_texture == 0) {
+    return;
+  }
 
   VR_EnsureMenuBitmap();
   if (Vr_menu_bitmap < 0) {
