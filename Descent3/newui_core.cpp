@@ -614,8 +614,13 @@ void DoUIFrame() {
   if (Multi_bail_ui_menu) {
     UI_frame_result = NEWUIRES_FORCEQUIT;
   } else {
-    if (UI_callback)
-      (*UI_callback)();
+    if (UI_callback) {
+      if (VR_IsEnabled() && GetFunctionMode() == MENU_MODE) {
+        SimpleUICallback();
+      } else {
+        (*UI_callback)();
+      }
+    }
 
     if (GetFunctionMode() == MENU_MODE) {
       tMusicSeqInfo music_info;
@@ -648,8 +653,13 @@ void DoUIFrameWithoutInput() {
   if (Multi_bail_ui_menu) {
     UI_frame_result = NEWUIRES_FORCEQUIT;
   } else {
-    if (UI_callback)
-      (*UI_callback)();
+    if (UI_callback) {
+      if (VR_IsEnabled() && GetFunctionMode() == MENU_MODE) {
+        SimpleUICallback();
+      } else {
+        (*UI_callback)();
+      }
+    }
 
     if (GetFunctionMode() == MENU_MODE) {
       tMusicSeqInfo music_info;
