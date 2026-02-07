@@ -435,15 +435,6 @@ void VR_RenderMenuFrame() {
   StartFrame(0, 0, Max_window_w, Max_window_h);
   rend_ClearScreen(GR_BLACK);
 
-  vector view_pos{0.0f, 0.0f, 0.0f};
-  matrix view_orient = Identity_matrix;
-  g3_StartFrame(&view_pos, &view_orient, D3_DEFAULT_ZOOM);
-
-  const float u_max = static_cast<float>(Vr_menu_width) / static_cast<float>(Vr_menu_texture_size);
-  const float v_max = static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
-  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max);
-
-  g3_EndFrame();
   EndFrame();
 
   if (Vr_openvr_ready && vr::VRCompositor()) {
