@@ -153,7 +153,7 @@ void VR_EnsureSubmitTexture() {
   if (!gl.gen_textures || !gl.bind_texture || !gl.tex_parameteri || !gl.tex_image_2d || !gl.delete_textures) {
     static bool missing_gl_warned = false;
     if (!missing_gl_warned) {
-      LOG_WARNING << "OpenVR: Missing GL entry points for texture submission.";
+      LOG_DEBUG << "OpenVR: Missing GL entry points for texture submission.";
       missing_gl_warned = true;
     }
     return;
