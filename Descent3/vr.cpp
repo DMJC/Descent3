@@ -217,10 +217,11 @@ void VR_UpdateSubmitTexture(const NewBitmap &screenshot) {
 
   for (uint32_t y = 0; y < Vr_submit_height; ++y) {
     const uint32_t src_y = (y * sample_height) / Vr_submit_height;
+    const uint32_t flipped_src_y = (sample_height - 1) - src_y;
     for (uint32_t x = 0; x < Vr_submit_width; ++x) {
       const uint32_t src_x = (x * sample_width) / Vr_submit_width;
-      const uint32_t spix = src_data[src_y * src_w + src_x];
-      Vr_submit_buffer[((Vr_submit_height - 1) - y) * Vr_submit_width + x] = spix;
+      const uint32_t spix = src_data[flipped_src_y * src_w + src_x];
+      Vr_submit_buffer[y * Vr_submit_width + x] = spix;
     }
   }
 
