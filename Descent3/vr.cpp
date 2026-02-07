@@ -284,6 +284,8 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
   constexpr float kArcDegrees = 100.0f;
   constexpr float kRadius = 6.0f;
   constexpr float kHeight = 3.0f;
+  (void)u_max;
+  (void)v_max;
 
   const float arc_radians = kArcDegrees * (kPi / 180.0f);
   const float start_angle = -arc_radians * 0.5f;
@@ -291,10 +293,11 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
   const float half_height = kHeight * 0.5f;
 
   rend_SetZBufferState(0);
-  rend_SetTextureType(TT_LINEAR);
+  rend_SetTextureType(TT_FLAT);
   rend_SetLighting(LS_NONE);
-  rend_SetAlphaType(AT_CONSTANT_TEXTURE);
+  rend_SetAlphaType(AT_CONSTANT);
   rend_SetAlphaValue(255);
+  rend_SetFlatColor(GR_RGB(255, 255, 255));
 
   for (int i = 0; i < kSegments; ++i) {
     const float a0 = start_angle + (delta * i);
@@ -312,23 +315,6 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
     g3_RotatePoint(&points[1], &p1);
     g3_RotatePoint(&points[2], &p2);
     g3_RotatePoint(&points[3], &p3);
-
-    const float u0 = static_cast<float>(i) / static_cast<float>(kSegments);
-    const float u1 = static_cast<float>(i + 1) / static_cast<float>(kSegments);
-
-    points[0].p3_flags |= PF_UV;
-    points[1].p3_flags |= PF_UV;
-    points[2].p3_flags |= PF_UV;
-    points[3].p3_flags |= PF_UV;
-
-    points[0].p3_u = u0 * u_max;
-    points[0].p3_v = 0.0f;
-    points[1].p3_u = u1 * u_max;
-    points[1].p3_v = 0.0f;
-    points[2].p3_u = u1 * u_max;
-    points[2].p3_v = v_max;
-    points[3].p3_u = u0 * u_max;
-    points[3].p3_v = v_max;
 
     g3_DrawPoly(4, point_list, texture_handle);
   }
