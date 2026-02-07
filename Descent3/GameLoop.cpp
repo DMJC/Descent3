@@ -2524,9 +2524,8 @@ void GameDrawMainView() {
       GameRenderWorld(Viewer_object, &eye_pos, Viewer_object->roomnum, &view_orient, Render_zoom, false);
       DoMatcensRenderFrame();
       ProcessRenderEvents();
-      auto screenshot = rend_Screenshot();
       EndFrame();
-      return screenshot;
+      return rend_Screenshot();
     };
 
     auto left = render_eye(-1.0f);
