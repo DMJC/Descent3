@@ -19,9 +19,20 @@
 #ifndef D3_VR_H
 #define D3_VR_H
 
+class NewBitmap;
+
+enum class VrRenderMode {
+  Cinema,
+  Stereo,
+};
+
 void VR_InitFromCommandLine();
 bool VR_IsEnabled();
+VrRenderMode VR_GetRenderMode();
+bool VR_IsStereoRendering();
+float VR_GetStereoEyeSeparation();
 void VR_RenderMenuFrame();
+void VR_SubmitStereoFrame(const NewBitmap &left, const NewBitmap &right);
 void VR_ResetGraphicsResources();
 void VR_Shutdown();
 
