@@ -53,12 +53,19 @@ constexpr float kPi = 3.14159265358979323846f;
 
 struct VrGlFns {
   bool loaded = false;
-  PFNGLGENTEXTURESPROC gen_textures = nullptr;
-  PFNGLDELETETEXTURESPROC delete_textures = nullptr;
-  PFNGLBINDTEXTUREPROC bind_texture = nullptr;
-  PFNGLTEXPARAMETERIPROC tex_parameteri = nullptr;
-  PFNGLTEXIMAGE2DPROC tex_image_2d = nullptr;
-  PFNGLTEXSUBIMAGE2DPROC tex_sub_image_2d = nullptr;
+  using GenTexturesFn = decltype(&glGenTextures);
+  using DeleteTexturesFn = decltype(&glDeleteTextures);
+  using BindTextureFn = decltype(&glBindTexture);
+  using TexParameteriFn = decltype(&glTexParameteri);
+  using TexImage2DFn = decltype(&glTexImage2D);
+  using TexSubImage2DFn = decltype(&glTexSubImage2D);
+
+  GenTexturesFn gen_textures = nullptr;
+  DeleteTexturesFn delete_textures = nullptr;
+  BindTextureFn bind_texture = nullptr;
+  TexParameteriFn tex_parameteri = nullptr;
+  TexImage2DFn tex_image_2d = nullptr;
+  TexSubImage2DFn tex_sub_image_2d = nullptr;
 };
 
 VrGlFns &VR_GetGlFns() {
@@ -67,12 +74,12 @@ VrGlFns &VR_GetGlFns() {
     return fns;
   }
 
-  fns.gen_textures = reinterpret_cast<PFNGLGENTEXTURESPROC>(SDL_GL_GetProcAddress("glGenTextures"));
-  fns.delete_textures = reinterpret_cast<PFNGLDELETETEXTURESPROC>(SDL_GL_GetProcAddress("glDeleteTextures"));
-  fns.bind_texture = reinterpret_cast<PFNGLBINDTEXTUREPROC>(SDL_GL_GetProcAddress("glBindTexture"));
-  fns.tex_parameteri = reinterpret_cast<PFNGLTEXPARAMETERIPROC>(SDL_GL_GetProcAddress("glTexParameteri"));
-  fns.tex_image_2d = reinterpret_cast<PFNGLTEXIMAGE2DPROC>(SDL_GL_GetProcAddress("glTexImage2D"));
-  fns.tex_sub_image_2d = reinterpret_cast<PFNGLTEXSUBIMAGE2DPROC>(SDL_GL_GetProcAddress("glTexSubImage2D"));
+  fns.gen_textures = reinterpret_cast<VrGlFns::GenTexturesFn>(SDL_GL_GetProcAddress("glGenTextures"));
+  fns.delete_textures = reinterpret_cast<VrGlFns::DeleteTexturesFn>(SDL_GL_GetProcAddress("glDeleteTextures"));
+  fns.bind_texture = reinterpret_cast<VrGlFns::BindTextureFn>(SDL_GL_GetProcAddress("glBindTexture"));
+  fns.tex_parameteri = reinterpret_cast<VrGlFns::TexParameteriFn>(SDL_GL_GetProcAddress("glTexParameteri"));
+  fns.tex_image_2d = reinterpret_cast<VrGlFns::TexImage2DFn>(SDL_GL_GetProcAddress("glTexImage2D"));
+  fns.tex_sub_image_2d = reinterpret_cast<VrGlFns::TexSubImage2DFn>(SDL_GL_GetProcAddress("glTexSubImage2D"));
   fns.loaded = true;
   return fns;
 }
