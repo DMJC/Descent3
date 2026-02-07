@@ -80,7 +80,8 @@ VrGlFns &VR_GetGlFns() {
   fns.tex_parameteri = reinterpret_cast<VrGlFns::TexParameteriFn>(SDL_GL_GetProcAddress("glTexParameteri"));
   fns.tex_image_2d = reinterpret_cast<VrGlFns::TexImage2DFn>(SDL_GL_GetProcAddress("glTexImage2D"));
   fns.tex_sub_image_2d = reinterpret_cast<VrGlFns::TexSubImage2DFn>(SDL_GL_GetProcAddress("glTexSubImage2D"));
-  fns.loaded = true;
+  fns.loaded = fns.gen_textures && fns.delete_textures && fns.bind_texture && fns.tex_parameteri && fns.tex_image_2d &&
+               fns.tex_sub_image_2d;
   return fns;
 }
 
@@ -151,7 +152,11 @@ void VR_EnsureSubmitTexture() {
 
   auto &gl = VR_GetGlFns();
   if (!gl.gen_textures || !gl.bind_texture || !gl.tex_parameteri || !gl.tex_image_2d || !gl.delete_textures) {
-    LOG_WARNING << "OpenVR: Missing GL entry points for texture submission.";
+    static bool missing_gl_warned = false;
+    if (!missing_gl_warned) {
+      LOG_DEBUG << "OpenVR: Missing GL entry points for texture submission.";
+      missing_gl_warned = true;
+    }
     return;
   }
 
@@ -277,7 +282,6 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
     points[3].p3_v = v_max;
 
     g3_DrawPoly(4, point_list, texture_handle);
-    LOG_WARNING.printf("Cinema Screen");
   }
 }
 } // namespace
@@ -320,8 +324,15 @@ void VR_RenderMenuFrame() {
     return;
   }
 
+  if (!Vr_openvr_ready || !Vr_system || Renderer_type != RENDERER_OPENGL) {
+    return;
+  }
+
   VR_UpdateOpenVRPoses();
   VR_EnsureSubmitTexture();
+  if (Vr_submit_texture == 0) {
+    return;
+  }
 
   VR_EnsureMenuBitmap();
   if (Vr_menu_bitmap < 0) {
@@ -354,6 +365,31 @@ void VR_RenderMenuFrame() {
     vr::VRCompositor()->Submit(vr::Eye_Left, &texture);
     vr::VRCompositor()->Submit(vr::Eye_Right, &texture);
   }
+}
+
+void VR_ResetGraphicsResources() {
+  if (!Vr_enabled) {
+    return;
+  }
+
+  auto &gl = VR_GetGlFns();
+  if (Vr_submit_texture != 0) {
+    if (gl.delete_textures) {
+      gl.delete_textures(1, &Vr_submit_texture);
+    }
+    Vr_submit_texture = 0;
+  }
+  Vr_submit_width = 0;
+  Vr_submit_height = 0;
+  Vr_submit_buffer.clear();
+
+  if (Vr_menu_bitmap >= 0) {
+    bm_FreeBitmap(Vr_menu_bitmap);
+    Vr_menu_bitmap = -1;
+  }
+  Vr_menu_width = 0;
+  Vr_menu_height = 0;
+  Vr_menu_texture_size = 0;
 }
 
 void VR_Shutdown() {

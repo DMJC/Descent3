@@ -664,6 +664,7 @@
 #include "mem.h"
 #include "newui.h"
 #include "stringtable.h"
+#include "vr.h"
 #include "pstring.h"
 #include "dedicated_server.h"
 #include "osiris_dll.h"
@@ -1616,6 +1617,9 @@ void ShowProgressScreen(const char *str, const char *str2, bool flip) {
   EndFrame();
   if (flip)
     rend_Flip();
+  if (VR_IsEnabled()) {
+    VR_RenderMenuFrame();
+  }
 }
 
 /*	does a mission briefing, returns if mission was canceled, a false, or 0 value.
