@@ -33,6 +33,7 @@
 #include "openvr.h"
 #include "renderer.h"
 #include "vecmat.h"
+#include <SDL3/SDL.h>
 
 namespace {
 bool Vr_enabled = false;
@@ -48,6 +49,32 @@ int Vr_menu_height = 0;
 int Vr_menu_texture_size = 0;
 
 constexpr float kPi = 3.14159265358979323846f;
+
+struct VrGlFns {
+  bool loaded = false;
+  PFNGLGENTEXTURESPROC gen_textures = nullptr;
+  PFNGLDELETETEXTURESPROC delete_textures = nullptr;
+  PFNGLBINDTEXTUREPROC bind_texture = nullptr;
+  PFNGLTEXPARAMETERIPROC tex_parameteri = nullptr;
+  PFNGLTEXIMAGE2DPROC tex_image_2d = nullptr;
+  PFNGLTEXSUBIMAGE2DPROC tex_sub_image_2d = nullptr;
+};
+
+VrGlFns &VR_GetGlFns() {
+  static VrGlFns fns;
+  if (fns.loaded) {
+    return fns;
+  }
+
+  fns.gen_textures = reinterpret_cast<PFNGLGENTEXTURESPROC>(SDL_GL_GetProcAddress("glGenTextures"));
+  fns.delete_textures = reinterpret_cast<PFNGLDELETETEXTURESPROC>(SDL_GL_GetProcAddress("glDeleteTextures"));
+  fns.bind_texture = reinterpret_cast<PFNGLBINDTEXTUREPROC>(SDL_GL_GetProcAddress("glBindTexture"));
+  fns.tex_parameteri = reinterpret_cast<PFNGLTEXPARAMETERIPROC>(SDL_GL_GetProcAddress("glTexParameteri"));
+  fns.tex_image_2d = reinterpret_cast<PFNGLTEXIMAGE2DPROC>(SDL_GL_GetProcAddress("glTexImage2D"));
+  fns.tex_sub_image_2d = reinterpret_cast<PFNGLTEXSUBIMAGE2DPROC>(SDL_GL_GetProcAddress("glTexSubImage2D"));
+  fns.loaded = true;
+  return fns;
+}
 
 int VR_NextPowerOfTwo(int value) {
   int size = 1;
@@ -114,6 +141,12 @@ void VR_EnsureSubmitTexture() {
     return;
   }
 
+  auto &gl = VR_GetGlFns();
+  if (!gl.gen_textures || !gl.bind_texture || !gl.tex_parameteri || !gl.tex_image_2d || !gl.delete_textures) {
+    LOG_WARNING << "OpenVR: Missing GL entry points for texture submission.";
+    return;
+  }
+
   uint32_t target_w = 0;
   uint32_t target_h = 0;
   Vr_system->GetRecommendedRenderTargetSize(&target_w, &target_h);
@@ -126,17 +159,17 @@ void VR_EnsureSubmitTexture() {
   }
 
   if (Vr_submit_texture != 0) {
-    dglDeleteTextures(1, &Vr_submit_texture);
+    gl.delete_textures(1, &Vr_submit_texture);
     Vr_submit_texture = 0;
   }
 
-  dglGenTextures(1, &Vr_submit_texture);
-  dglBindTexture(GL_TEXTURE_2D, Vr_submit_texture);
-  dglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  dglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  dglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  dglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  dglTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, target_w, target_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+  gl.gen_textures(1, &Vr_submit_texture);
+  gl.bind_texture(GL_TEXTURE_2D, Vr_submit_texture);
+  gl.tex_parameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  gl.tex_parameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  gl.tex_parameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  gl.tex_parameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  gl.tex_image_2d(GL_TEXTURE_2D, 0, GL_RGBA8, target_w, target_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
   Vr_submit_width = target_w;
   Vr_submit_height = target_h;
@@ -145,6 +178,11 @@ void VR_EnsureSubmitTexture() {
 
 void VR_UpdateSubmitTexture(const NewBitmap &screenshot) {
   if (!Vr_openvr_ready || Vr_submit_texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
+    return;
+  }
+
+  auto &gl = VR_GetGlFns();
+  if (!gl.bind_texture || !gl.tex_sub_image_2d) {
     return;
   }
 
@@ -165,9 +203,9 @@ void VR_UpdateSubmitTexture(const NewBitmap &screenshot) {
     }
   }
 
-  dglBindTexture(GL_TEXTURE_2D, Vr_submit_texture);
-  dglTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, Vr_submit_width, Vr_submit_height, GL_RGBA, GL_UNSIGNED_BYTE,
-                   Vr_submit_buffer.data());
+  gl.bind_texture(GL_TEXTURE_2D, Vr_submit_texture);
+  gl.tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, Vr_submit_width, Vr_submit_height, GL_RGBA, GL_UNSIGNED_BYTE,
+                      Vr_submit_buffer.data());
 }
 
 void VR_UpdateOpenVRPoses() {
@@ -310,8 +348,11 @@ void VR_RenderMenuFrame() {
 }
 
 void VR_Shutdown() {
+  auto &gl = VR_GetGlFns();
   if (Vr_submit_texture != 0) {
-    dglDeleteTextures(1, &Vr_submit_texture);
+    if (gl.delete_textures) {
+      gl.delete_textures(1, &Vr_submit_texture);
+    }
     Vr_submit_texture = 0;
   }
   Vr_submit_width = 0;
