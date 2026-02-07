@@ -798,6 +798,7 @@
  * $NoKeywords: $
  */
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -828,6 +829,7 @@
 #include "bsp.h"
 #include "SmallViews.h"
 #include "newui.h"
+#include "vecmat.h"
 #include "physics.h"
 #include "controls.h"
 #include "gamesequence.h"
@@ -2517,15 +2519,29 @@ void GameDrawMainView() {
     }
 
     constexpr float kHudRenderZoom = 0.56f;
+    constexpr float kToeInConvergenceDistance = 20.0f;
     const float eye_offset = VR_GetStereoEyeSeparation() * 0.5f;
     auto render_eye = [&](float eye_sign) {
+      const float toe_in = std::atan2(eye_offset, kToeInConvergenceDistance);
+      const float signed_toe_in = -eye_sign * toe_in;
+      const float sin_angle = std::sin(signed_toe_in);
+      const float cos_angle = std::cos(signed_toe_in);
+      auto rotate_about_up = [&](const vector &v) {
+        vector cross;
+        vm_CrossProduct(&cross, &view_orient.uvec, &v);
+        const float dot = vm_DotProduct(&view_orient.uvec, &v);
+        return (v * cos_angle) + (cross * sin_angle) + (view_orient.uvec * (dot * (1.0f - cos_angle)));
+      };
+      matrix eye_orient = view_orient;
+      eye_orient.fvec = rotate_about_up(view_orient.fvec);
+      eye_orient.rvec = rotate_about_up(view_orient.rvec);
       vector eye_pos = Viewer_object->pos + (view_orient.rvec * (eye_sign * eye_offset));
       StartFrame(false);
       rend_ClearScreen(GR_BLACK);
-      GameRenderWorld(Viewer_object, &eye_pos, Viewer_object->roomnum, &view_orient, Render_zoom, false);
+      GameRenderWorld(Viewer_object, &eye_pos, Viewer_object->roomnum, &eye_orient, Render_zoom, false);
       DoMatcensRenderFrame();
       ProcessRenderEvents();
-      g3_StartFrame(&eye_pos, &view_orient, kHudRenderZoom);
+      g3_StartFrame(&eye_pos, &eye_orient, kHudRenderZoom);
       RenderHUDFrame();
       g3_EndFrame();
       EndFrame();
