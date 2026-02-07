@@ -340,6 +340,7 @@ target_link_libraries(Descent3 PRIVATE
   misc
   model
   module
+  OpenVR::OpenVR
   music
   networking
   physics

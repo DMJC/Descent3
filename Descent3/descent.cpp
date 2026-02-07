@@ -409,6 +409,7 @@
 #include "localization.h"
 #include "config.h"
 #include "uisys.h"
+#include "vr.h"
 
 //	---------------------------------------------------------------------------
 //	Variables
@@ -592,6 +593,7 @@ void MainLoop() {
     ShowStaticScreen("upsell.ogf");
 #endif
   FreeMultiDLL();
+  VR_Shutdown();
   SetScreenMode(SM_NULL);
 }
 

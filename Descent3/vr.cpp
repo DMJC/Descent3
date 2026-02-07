@@ -28,11 +28,14 @@
 #include "game.h"
 #include "log.h"
 #include "NewBitmap.h"
+#include "openvr.h"
 #include "renderer.h"
 #include "vecmat.h"
 
 namespace {
 bool Vr_enabled = false;
+bool Vr_openvr_ready = false;
+vr::IVRSystem *Vr_system = nullptr;
 int Vr_menu_bitmap = -1;
 int Vr_menu_width = 0;
 int Vr_menu_height = 0;
@@ -102,6 +105,15 @@ void VR_UpdateMenuTexture() {
   }
 }
 
+void VR_UpdateOpenVRPoses() {
+  if (!Vr_openvr_ready || !vr::VRCompositor()) {
+    return;
+  }
+
+  vr::TrackedDevicePose_t poses[vr::k_unMaxTrackedDeviceCount];
+  vr::VRCompositor()->WaitGetPoses(poses, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
+}
+
 void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
   constexpr int kSegments = 32;
   constexpr float kArcDegrees = 100.0f;
@@ -160,8 +172,30 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
 
 void VR_InitFromCommandLine() {
   Vr_enabled = FindArg("-vr") != 0;
-  if (Vr_enabled) {
-    LOG_INFO << "OpenVR enabled via -vr. Rendering main menu to cinema screen.";
+  if (!Vr_enabled) {
+    return;
+  }
+
+  vr::EVRInitError error = vr::VRInitError_None;
+  Vr_system = vr::VR_Init(&error, vr::VRApplication_Scene);
+  if (error != vr::VRInitError_None) {
+    LOG_WARNING.printf("OpenVR init failed: %s", vr::VR_GetVRInitErrorAsEnglishDescription(error));
+    Vr_system = nullptr;
+    Vr_enabled = false;
+    return;
+  }
+
+  Vr_openvr_ready = true;
+  if (!vr::VRCompositor()) {
+    LOG_WARNING << "OpenVR compositor unavailable.";
+    Vr_openvr_ready = false;
+  }
+
+  if (Vr_openvr_ready) {
+    uint32_t target_w = 0;
+    uint32_t target_h = 0;
+    Vr_system->GetRecommendedRenderTargetSize(&target_w, &target_h);
+    LOG_INFO.printf("OpenVR enabled via -vr. Recommended render target %ux%u.", target_w, target_h);
   }
 }
 
@@ -173,6 +207,8 @@ void VR_RenderMenuFrame() {
   if (!Vr_enabled) {
     return;
   }
+
+  VR_UpdateOpenVRPoses();
 
   VR_EnsureMenuBitmap();
   if (Vr_menu_bitmap < 0) {
@@ -194,4 +230,13 @@ void VR_RenderMenuFrame() {
 
   g3_EndFrame();
   EndFrame();
+}
+
+void VR_Shutdown() {
+  if (Vr_system) {
+    vr::VR_Shutdown();
+    Vr_system = nullptr;
+  }
+  Vr_openvr_ready = false;
+  Vr_enabled = false;
 }
