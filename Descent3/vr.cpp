@@ -268,15 +268,16 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
     points[3].p3_flags |= PF_UV;
 
     points[0].p3_u = u0 * u_max;
-    points[0].p3_v = v_max;
+    points[0].p3_v = 0.0f;
     points[1].p3_u = u1 * u_max;
-    points[1].p3_v = v_max;
+    points[1].p3_v = 0.0f;
     points[2].p3_u = u1 * u_max;
-    points[2].p3_v = 0.0f;
+    points[2].p3_v = v_max;
     points[3].p3_u = u0 * u_max;
-    points[3].p3_v = 0.0f;
+    points[3].p3_v = v_max;
 
     g3_DrawPoly(4, point_list, texture_handle);
+    LOG_WARNING.printf("Cinema Screen");
   }
 }
 } // namespace
