@@ -137,6 +137,7 @@ set(HEADERS
   viseffect.h
   viseffect_external.h
   voice.h
+  vr.h
   weapon.h
   weapon_external.h
   weather.h)
@@ -269,6 +270,7 @@ set(CPPS
   vclip.cpp
   viseffect.cpp
   voice.cpp
+  vr.cpp
   weapon.cpp
   WeaponFire.cpp
   weather.cpp

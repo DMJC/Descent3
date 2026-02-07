@@ -200,6 +200,7 @@
 #include "textaux.h"
 #include "d3music.h"
 #include "hlsoundlib.h"
+#include "vr.h"
 
 extern void ui_DoCursor();
 
@@ -630,6 +631,10 @@ void DoUIFrame() {
     }
 
     UI_frame_result = ui_DoFrame();
+
+    if (VR_IsEnabled() && GetFunctionMode() == MENU_MODE) {
+      VR_RenderMenuFrame();
+    }
   }
 
   if (UI_input.printscreen) {

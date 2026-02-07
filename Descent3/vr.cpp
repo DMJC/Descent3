@@ -1,0 +1,147 @@
+/*
+* Descent 3
+* Copyright (C) 2024 Parallax Software
+*
+* This program is free software: you can redistribute it and/or modify
+* it under the terms of the GNU General Public License as published by
+* the Free Software Foundation, either version 3 of the License, or
+* (at your option) any later version.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+* GNU General Public License for more details.
+*
+* You should have received a copy of the GNU General Public License
+* along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#include "vr.h"
+
+#include <cmath>
+
+#include "3d.h"
+#include "args.h"
+#include "bitmap.h"
+#include "descent.h"
+#include "game.h"
+#include "log.h"
+#include "renderer.h"
+#include "vecmat.h"
+
+namespace {
+bool Vr_enabled = false;
+int Vr_menu_bitmap = -1;
+int Vr_menu_width = 0;
+int Vr_menu_height = 0;
+
+constexpr float kPi = 3.14159265358979323846f;
+
+void VR_EnsureMenuBitmap() {
+  if (Vr_menu_width == Max_window_w && Vr_menu_height == Max_window_h && Vr_menu_bitmap >= 0)
+    return;
+
+  if (Vr_menu_bitmap >= 0) {
+    bm_FreeBitmap(Vr_menu_bitmap);
+    Vr_menu_bitmap = -1;
+  }
+
+  Vr_menu_width = Max_window_w;
+  Vr_menu_height = Max_window_h;
+  Vr_menu_bitmap = bm_AllocBitmap(Vr_menu_width, Vr_menu_height, 0);
+  if (Vr_menu_bitmap < 0) {
+    LOG_WARNING << "VR: Unable to allocate menu bitmap for cinema screen.";
+  }
+}
+
+void VR_DrawCinemaScreen(int texture_handle) {
+  constexpr int kSegments = 32;
+  constexpr float kArcDegrees = 100.0f;
+  constexpr float kRadius = 6.0f;
+  constexpr float kHeight = 3.0f;
+
+  const float arc_radians = kArcDegrees * (kPi / 180.0f);
+  const float start_angle = -arc_radians * 0.5f;
+  const float delta = arc_radians / static_cast<float>(kSegments);
+  const float half_height = kHeight * 0.5f;
+
+  rend_SetZBufferState(0);
+  rend_SetTextureType(TT_LINEAR);
+  rend_SetLighting(LS_NONE);
+  rend_SetAlphaType(AT_CONSTANT_TEXTURE);
+  rend_SetAlphaValue(255);
+
+  for (int i = 0; i < kSegments; ++i) {
+    const float a0 = start_angle + (delta * i);
+    const float a1 = a0 + delta;
+
+    vector p0{std::sin(a0) * kRadius, -half_height, std::cos(a0) * kRadius};
+    vector p1{std::sin(a1) * kRadius, -half_height, std::cos(a1) * kRadius};
+    vector p2{std::sin(a1) * kRadius, half_height, std::cos(a1) * kRadius};
+    vector p3{std::sin(a0) * kRadius, half_height, std::cos(a0) * kRadius};
+
+    g3Point points[4];
+    g3Point *point_list[4] = {&points[0], &points[1], &points[2], &points[3]};
+
+    g3_RotatePoint(&points[0], &p0);
+    g3_RotatePoint(&points[1], &p1);
+    g3_RotatePoint(&points[2], &p2);
+    g3_RotatePoint(&points[3], &p3);
+
+    const float u0 = static_cast<float>(i) / static_cast<float>(kSegments);
+    const float u1 = static_cast<float>(i + 1) / static_cast<float>(kSegments);
+
+    points[0].p3_flags |= PF_UV;
+    points[1].p3_flags |= PF_UV;
+    points[2].p3_flags |= PF_UV;
+    points[3].p3_flags |= PF_UV;
+
+    points[0].p3_u = u0;
+    points[0].p3_v = 1.0f;
+    points[1].p3_u = u1;
+    points[1].p3_v = 1.0f;
+    points[2].p3_u = u1;
+    points[2].p3_v = 0.0f;
+    points[3].p3_u = u0;
+    points[3].p3_v = 0.0f;
+
+    g3_DrawPoly(4, point_list, texture_handle);
+  }
+}
+} // namespace
+
+void VR_InitFromCommandLine() {
+  Vr_enabled = FindArg("-vr") != 0;
+  if (Vr_enabled) {
+    LOG_INFO << "OpenVR enabled via -vr. Rendering main menu to cinema screen.";
+  }
+}
+
+bool VR_IsEnabled() {
+  return Vr_enabled;
+}
+
+void VR_RenderMenuFrame() {
+  if (!Vr_enabled) {
+    return;
+  }
+
+  VR_EnsureMenuBitmap();
+  if (Vr_menu_bitmap < 0) {
+    return;
+  }
+
+  rend_Screenshot(Vr_menu_bitmap);
+
+  StartFrame(0, 0, Max_window_w, Max_window_h);
+  rend_ClearScreen(GR_BLACK);
+
+  vector view_pos{0.0f, 0.0f, 0.0f};
+  matrix view_orient = Identity_matrix;
+  g3_StartFrame(&view_pos, &view_orient, D3_DEFAULT_ZOOM);
+
+  VR_DrawCinemaScreen(Vr_menu_bitmap);
+
+  g3_EndFrame();
+  EndFrame();
+}

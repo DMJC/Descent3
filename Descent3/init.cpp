@@ -929,6 +929,7 @@
 #include "ddio.h"
 #include "render.h"
 #include "descent.h"
+#include "vr.h"
 #include "renderer.h"
 #include "vclip.h"
 #include "grdefs.h"
@@ -1117,6 +1118,8 @@ void PreInitD3Systems() {
 #ifndef RELEASE
   SetMessageBoxTitle(PRODUCT_NAME " Message");
 #endif
+
+  VR_InitFromCommandLine();
 }
 
 void SaveGameSettings() {
