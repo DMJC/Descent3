@@ -387,6 +387,33 @@ void rend_PreUploadTextureToCard(int handle, int map_type) {}
 // Frees an uploaded texture from the video card
 void rend_FreePreUploadedTexture(int handle, int map_type) {}
 
+bool rend_RegisterExternalTexture(int bm_handle, unsigned int texture_id, int width, int height) {
+  (void)width;
+  (void)height;
+#ifdef DEDICATED_ONLY
+  return false;
+#else
+  if (Renderer_type != RENDERER_OPENGL) {
+    return false;
+  }
+
+  return opengl_RegisterExternalTexture(bm_handle, texture_id);
+#endif
+}
+
+void rend_UnregisterExternalTexture(int bm_handle) {
+#ifdef DEDICATED_ONLY
+  (void)bm_handle;
+  return;
+#else
+  if (Renderer_type != RENDERER_OPENGL) {
+    return;
+  }
+
+  opengl_UnregisterExternalTexture(bm_handle);
+#endif
+}
+
 // Returns 1 if there is mid video memory, 2 if there is low vid memory, or 0 if there is large vid memory
 int rend_LowVidMem() { return 0; }
 

@@ -56,6 +56,7 @@ int Vr_menu_bitmap = -1;
 int Vr_menu_width = 0;
 int Vr_menu_height = 0;
 int Vr_menu_texture_size = 0;
+bool Vr_menu_texture_registered = false;
 
 void VR_DeleteSubmitSurface(VrSubmitSurface &surface);
 
@@ -151,6 +152,10 @@ void VR_EnsureMenuBitmap() {
     Vr_menu_fbo_texture = 0;
   }
   if (Vr_menu_bitmap >= 0) {
+    if (Vr_menu_texture_registered) {
+      rend_UnregisterExternalTexture(Vr_menu_bitmap);
+      Vr_menu_texture_registered = false;
+    }
     bm_FreeBitmap(Vr_menu_bitmap);
     Vr_menu_bitmap = -1;
   }
@@ -190,6 +195,13 @@ void VR_EnsureMenuBitmap() {
   Vr_menu_bitmap = bm_AllocBitmap(Vr_menu_texture_size, Vr_menu_texture_size, 0);
   if (Vr_menu_bitmap < 0) {
     LOG_WARNING << "VR: Unable to allocate menu bitmap for cinema screen.";
+  } else {
+    Vr_menu_texture_registered =
+        rend_RegisterExternalTexture(Vr_menu_bitmap, static_cast<unsigned int>(Vr_menu_fbo_texture),
+                                     Vr_menu_width, Vr_menu_height);
+    if (!Vr_menu_texture_registered) {
+      LOG_WARNING << "VR: Failed to register menu framebuffer texture with renderer.";
+    }
   }
 }
 
@@ -404,18 +416,14 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   g3_StartFrame(&view_pos, &view_orient, D3_DEFAULT_ZOOM);
 
   // Calculate UV coords for menu texture
-  const float u_max = static_cast<float>(Vr_menu_width) / static_cast<float>(Vr_menu_texture_size);
-  const float v_max = static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
+  const float u_max = Vr_menu_texture_registered
+                          ? 1.0f
+                          : static_cast<float>(Vr_menu_width) / static_cast<float>(Vr_menu_texture_size);
+  const float v_max = Vr_menu_texture_registered
+                          ? 1.0f
+                          : static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
   
   // Draw the curved cinema screen with menu texture
-  // We need to use the FBO texture directly instead of Vr_menu_bitmap
-  // For now, we'll use Vr_menu_bitmap but bind our FBO texture to it
-  auto &gl = VR_GetGlFns();
-  if (gl.bind_texture) {
-    // Temporarily bind our FBO texture for rendering
-    gl.bind_texture(GL_TEXTURE_2D, Vr_menu_fbo_texture);
-  }
-  
   VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max);
 
   g3_EndFrame();
@@ -629,6 +637,10 @@ void VR_ResetGraphicsResources() {
   }
 
   if (Vr_menu_bitmap >= 0) {
+    if (Vr_menu_texture_registered) {
+      rend_UnregisterExternalTexture(Vr_menu_bitmap);
+      Vr_menu_texture_registered = false;
+    }
     bm_FreeBitmap(Vr_menu_bitmap);
     Vr_menu_bitmap = -1;
   }
@@ -653,6 +665,11 @@ void VR_Shutdown() {
   if (Vr_menu_fbo_texture != 0 && gl.delete_textures) {
     gl.delete_textures(1, &Vr_menu_fbo_texture);
     Vr_menu_fbo_texture = 0;
+  }
+
+  if (Vr_menu_bitmap >= 0 && Vr_menu_texture_registered) {
+    rend_UnregisterExternalTexture(Vr_menu_bitmap);
+    Vr_menu_texture_registered = false;
   }
   
   if (Vr_system) {

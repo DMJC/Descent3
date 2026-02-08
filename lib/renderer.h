@@ -621,6 +621,11 @@ void rend_SetErrorMessage(const char *str);
 void rend_PreUploadTextureToCard(int, int);
 void rend_FreePreUploadedTexture(int, int);
 
+// Registers an externally managed texture with a bitmap handle.
+// Returns true if the renderer was able to use the external texture.
+bool rend_RegisterExternalTexture(int bm_handle, unsigned int texture_id, int width, int height);
+void rend_UnregisterExternalTexture(int bm_handle);
+
 // Returns 1 if there is mid video memory, 2 if there is low vid memory, or 0 if there is large vid memory
 int rend_LowVidMem();
 

@@ -88,6 +88,8 @@ void gpu_RenderPolygon(PosColorUVVertex *vData, uint32_t nv);
 void gpu_RenderPolygonUV2(PosColorUV2Vertex *vData, uint32_t nv);
 void gpu_DrawFlatPolygon3D(g3Point **p, int nv);
 void rend_DrawMultitexturePolygon3D(int handle, g3Point **p, int nv, int map_type);
+bool opengl_RegisterExternalTexture(int bm_handle, unsigned int texture_id);
+void opengl_UnregisterExternalTexture(int bm_handle);
 
 /*
 * Returns the color to use for a given point, based on lighting and alpha modes

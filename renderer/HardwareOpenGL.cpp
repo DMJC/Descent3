@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <optional>
 
 // TODO: Use SDL_FunctionPointer properly instead
@@ -1009,6 +1010,38 @@ int opengl_MakeBitmapCurrent(int handle, int map_type, int tn) {
 
   CHECK_ERROR(7)
   return 1;
+}
+
+bool opengl_RegisterExternalTexture(int bm_handle, unsigned int texture_id) {
+  if (!OpenGL_cache_initted || !OpenGL_bitmap_remap || !OpenGL_bitmap_states) {
+    return false;
+  }
+
+  if (bm_handle < 0 || bm_handle >= MAX_BITMAPS) {
+    return false;
+  }
+
+  if (texture_id > std::numeric_limits<uint16_t>::max()) {
+    LOG_WARNING << "OpenGL: External texture id exceeds bitmap remap storage.";
+    return false;
+  }
+
+  OpenGL_bitmap_remap[bm_handle] = static_cast<uint16_t>(texture_id);
+  GameBitmaps[bm_handle].flags &= ~(BF_CHANGED | BF_BRAND_NEW);
+  return true;
+}
+
+void opengl_UnregisterExternalTexture(int bm_handle) {
+  if (!OpenGL_cache_initted || !OpenGL_bitmap_remap) {
+    return;
+  }
+
+  if (bm_handle < 0 || bm_handle >= MAX_BITMAPS) {
+    return;
+  }
+
+  OpenGL_bitmap_remap[bm_handle] = 65535;
+  GameBitmaps[bm_handle].flags |= BF_CHANGED | BF_BRAND_NEW;
 }
 
 // Sets up an appropriate wrap type for the current bound texture
