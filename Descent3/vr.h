@@ -20,8 +20,7 @@
 #define D3_VR_H
 
 class NewBitmap;
-struct matrix;
-struct vector;
+#include "vecmat.h"
 
 enum class VrRenderMode {
   Cinema,
