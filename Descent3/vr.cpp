@@ -27,6 +27,7 @@
 #include "bitmap.h"
 #include "descent.h"
 #include "game.h"
+#include "gamesequence.h"
 #include "log.h"
 #include "NewBitmap.h"
 #include "../renderer/dyna_gl.h"
@@ -102,9 +103,7 @@ int VR_NextPowerOfTwo(int value) {
   return size;
 }
 
-void VR_EnsureMenuBitmap() {
-  const int desired_width = Max_window_w;
-  const int desired_height = Max_window_h;
+void VR_EnsureMenuBitmap(int desired_width, int desired_height) {
   const int desired_texture_size = VR_NextPowerOfTwo(std::max(desired_width, desired_height));
 
   if (Vr_menu_width == desired_width && Vr_menu_height == desired_height && Vr_menu_texture_size == desired_texture_size &&
@@ -145,17 +144,18 @@ void VR_UpdateMenuTexture(const NewBitmap &screenshot) {
   const int dest_size = Vr_menu_texture_size;
   for (int y = 0; y < dest_size; ++y) {
     for (int x = 0; x < dest_size; ++x) {
-      uint16_t pixel = GR_RGB16(0, 0, 0);
+      uint16_t pixel = OPAQUE_FLAG | GR_RGB16(0, 0, 0);
       if (x < static_cast<int>(src_w) && y < static_cast<int>(src_h)) {
         const uint32_t spix = src_data[y * w + x];
         const int r = spix & 0xff;
         const int g = (spix >> 8) & 0xff;
         const int b = (spix >> 16) & 0xff;
-        pixel = GR_RGB16(r, g, b);
+        pixel = OPAQUE_FLAG | GR_RGB16(r, g, b);
       }
       dest_data[((dest_size - 1) - y) * dest_size + x] = pixel;
     }
   }
+  GameBitmaps[Vr_menu_bitmap].flags |= BF_CHANGED;
 }
 
 void VR_EnsureSubmitTexture() {
@@ -234,7 +234,8 @@ bool VR_EnsureSubmitSurface(VrSubmitSurface &surface) {
   return surface.texture != 0;
 }
 
-void VR_UpdateSubmitSurface(const NewBitmap &screenshot, VrSubmitSurface &surface, bool allow_stereo_crop) {
+void VR_UpdateSubmitSurface(const NewBitmap &screenshot, VrSubmitSurface &surface, bool allow_stereo_crop,
+                            int eye_index) {
   if (!Vr_openvr_ready || surface.texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
     return;
   }
@@ -255,11 +256,13 @@ void VR_UpdateSubmitSurface(const NewBitmap &screenshot, VrSubmitSurface &surfac
   const bool stereo_top_bottom = allow_stereo_crop && (src_w > 0) && (src_h >= src_w * 2);
   const uint32_t sample_width = stereo_side_by_side ? (src_w / 2) : src_w;
   const uint32_t sample_height = stereo_top_bottom ? (src_h / 2) : src_h;
+  const uint32_t offset_x = (stereo_side_by_side && eye_index == 1) ? sample_width : 0;
+  const uint32_t offset_y = (stereo_top_bottom && eye_index == 1) ? sample_height : 0;
 
   for (uint32_t y = 0; y < Vr_submit_height; ++y) {
-    const uint32_t src_y = (y * sample_height) / Vr_submit_height;
+    const uint32_t src_y = (y * sample_height) / Vr_submit_height + offset_y;
     for (uint32_t x = 0; x < Vr_submit_width; ++x) {
-      const uint32_t src_x = (x * sample_width) / Vr_submit_width;
+      const uint32_t src_x = (x * sample_width) / Vr_submit_width + offset_x;
       const uint32_t spix = src_data[src_y * src_w + src_x];
       surface.buffer[y * Vr_submit_width + x] = spix;
     }
@@ -293,8 +296,12 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
   rend_SetZBufferState(0);
   rend_SetTextureType(TT_LINEAR);
   rend_SetLighting(LS_NONE);
-  rend_SetAlphaType(AT_CONSTANT_TEXTURE);
+  rend_SetAlphaType(AT_CONSTANT);
   rend_SetAlphaValue(255);
+  rend_SetColorModel(CM_RGB);
+  rend_SetOverlayType(OT_NONE);
+  rend_SetWrapType(WT_CLAMP);
+  rend_SetFiltering(1);
 
   for (int i = 0; i < kSegments; ++i) {
     const float a0 = start_angle + (delta * i);
@@ -308,6 +315,11 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
     g3Point points[4];
     g3Point *point_list[4] = {&points[0], &points[1], &points[2], &points[3]};
 
+    points[0].p3_vecPreRot = p0;
+    points[1].p3_vecPreRot = p1;
+    points[2].p3_vecPreRot = p2;
+    points[3].p3_vecPreRot = p3;
+
     g3_RotatePoint(&points[0], &p0);
     g3_RotatePoint(&points[1], &p1);
     g3_RotatePoint(&points[2], &p2);
@@ -316,19 +328,23 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
     const float u0 = static_cast<float>(i) / static_cast<float>(kSegments);
     const float u1 = static_cast<float>(i + 1) / static_cast<float>(kSegments);
 
-    points[0].p3_flags |= PF_UV;
-    points[1].p3_flags |= PF_UV;
-    points[2].p3_flags |= PF_UV;
-    points[3].p3_flags |= PF_UV;
+    g3UVL uvls[4]{};
+    uvls[0].u = u0 * u_max;
+    uvls[0].v = 0.0f;
+    uvls[1].u = u1 * u_max;
+    uvls[1].v = 0.0f;
+    uvls[2].u = u1 * u_max;
+    uvls[2].v = v_max;
+    uvls[3].u = u0 * u_max;
+    uvls[3].v = v_max;
 
-    points[0].p3_u = u0 * u_max;
-    points[0].p3_v = 0.0f;
-    points[1].p3_u = u1 * u_max;
-    points[1].p3_v = 0.0f;
-    points[2].p3_u = u1 * u_max;
-    points[2].p3_v = v_max;
-    points[3].p3_u = u0 * u_max;
-    points[3].p3_v = v_max;
+    for (int k = 0; k < 4; ++k) {
+      g3Point *point = &points[k];
+      point->p3_flags = PF_UV | PF_L | PF_ORIGPOINT;
+      g3_CodePoint(point);
+      point->p3_uvl = uvls[k];
+      point->p3_l = 1.0f;
+    }
 
     g3_DrawPoly(4, point_list, texture_handle);
   }
@@ -384,7 +400,7 @@ VrRenderMode VR_GetRenderMode() {
 }
 
 bool VR_IsStereoRendering() {
-  return Vr_enabled && Vr_render_mode == VrRenderMode::Stereo;
+  return Vr_enabled && (Vr_render_mode == VrRenderMode::Stereo || GetGameState() == GAMESTATE_LVLPLAYING);
 }
 
 float VR_GetStereoEyeSeparation() {
@@ -406,26 +422,23 @@ void VR_RenderMenuFrame() {
     return;
   }
 
-  VR_EnsureMenuBitmap();
-  if (Vr_menu_bitmap < 0) {
-    return;
-  }
-
   auto screenshot = rend_Screenshot();
   if (screenshot && screenshot->getData()) {
-    VR_UpdateMenuTexture(*screenshot);
-    if (Vr_render_mode == VrRenderMode::Stereo) {
-      if (!VR_EnsureSubmitSurface(Vr_submit_left) || !VR_EnsureSubmitSurface(Vr_submit_right)) {
-        return;
-      }
-      VR_UpdateSubmitSurface(*screenshot, Vr_submit_left, true);
-      VR_UpdateSubmitSurface(*screenshot, Vr_submit_right, true);
-    } else {
-      if (!VR_EnsureSubmitSurface(Vr_submit_cinema)) {
-        return;
-      }
-      VR_UpdateSubmitSurface(*screenshot, Vr_submit_cinema, true);
+    uint32_t screenshot_width = 0;
+    uint32_t screenshot_height = 0;
+    screenshot->getSize(screenshot_width, screenshot_height);
+    if (screenshot_width == 0 || screenshot_height == 0) {
+      return;
     }
+
+    VR_EnsureMenuBitmap(static_cast<int>(screenshot_width), static_cast<int>(screenshot_height));
+    if (Vr_menu_bitmap < 0) {
+      return;
+    }
+
+    VR_UpdateMenuTexture(*screenshot);
+  } else {
+    return;
   }
 
   StartFrame(0, 0, Max_window_w, Max_window_h);
@@ -440,19 +453,20 @@ void VR_RenderMenuFrame() {
   VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max);
 
   g3_EndFrame();
+
+  auto curved_screenshot = rend_Screenshot();
+  if (curved_screenshot && curved_screenshot->getData()) {
+    if (!VR_EnsureSubmitSurface(Vr_submit_cinema)) {
+      return;
+    }
+    VR_UpdateSubmitSurface(*curved_screenshot, Vr_submit_cinema, false, 0);
+  }
+
+  rend_ClearScreen(GR_BLACK);
   EndFrame();
 
   if (Vr_openvr_ready && vr::VRCompositor()) {
-    if (Vr_render_mode == VrRenderMode::Stereo) {
-      if (Vr_submit_left.texture != 0 && Vr_submit_right.texture != 0) {
-        vr::Texture_t left_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
-                                      vr::TextureType_OpenGL, vr::ColorSpace_Auto};
-        vr::Texture_t right_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_right.texture)),
-                                       vr::TextureType_OpenGL, vr::ColorSpace_Auto};
-        vr::VRCompositor()->Submit(vr::Eye_Left, &left_texture);
-        vr::VRCompositor()->Submit(vr::Eye_Right, &right_texture);
-      }
-    } else if (Vr_submit_cinema.texture != 0) {
+    if (Vr_submit_cinema.texture != 0) {
       vr::Texture_t texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_cinema.texture)),
                                vr::TextureType_OpenGL, vr::ColorSpace_Auto};
       vr::VRCompositor()->Submit(vr::Eye_Left, &texture);
@@ -480,8 +494,8 @@ void VR_SubmitStereoFrame(const NewBitmap &left, const NewBitmap &right) {
     return;
   }
 
-  VR_UpdateSubmitSurface(left, Vr_submit_left, false);
-  VR_UpdateSubmitSurface(right, Vr_submit_right, false);
+  VR_UpdateSubmitSurface(left, Vr_submit_left, false, 0);
+  VR_UpdateSubmitSurface(right, Vr_submit_right, false, 1);
 
   if (Vr_openvr_ready && vr::VRCompositor()) {
     vr::Texture_t left_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),

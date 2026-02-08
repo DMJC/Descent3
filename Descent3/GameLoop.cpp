@@ -828,6 +828,7 @@
 #include "bsp.h"
 #include "SmallViews.h"
 #include "newui.h"
+#include "vecmat.h"
 #include "physics.h"
 #include "controls.h"
 #include "gamesequence.h"
@@ -2516,14 +2517,24 @@ void GameDrawMainView() {
       }
     }
 
+    constexpr float kHudRenderZoom = 0.56f;
+    constexpr float kToeInConvergenceDistance = 2.0f;
     const float eye_offset = VR_GetStereoEyeSeparation() * 0.5f;
     auto render_eye = [&](float eye_sign) {
       vector eye_pos = Viewer_object->pos + (view_orient.rvec * (eye_sign * eye_offset));
+      const vector converge_point = Viewer_object->pos + (view_orient.fvec * kToeInConvergenceDistance);
+      vector eye_fvec = converge_point - eye_pos;
+      vm_NormalizeVector(&eye_fvec);
+      matrix eye_orient;
+      vm_VectorToMatrix(&eye_orient, &eye_fvec, &view_orient.uvec, nullptr);
       StartFrame(false);
       rend_ClearScreen(GR_BLACK);
-      GameRenderWorld(Viewer_object, &eye_pos, Viewer_object->roomnum, &view_orient, Render_zoom, false);
+      GameRenderWorld(Viewer_object, &eye_pos, Viewer_object->roomnum, &eye_orient, Render_zoom, false);
       DoMatcensRenderFrame();
       ProcessRenderEvents();
+      g3_StartFrame(&eye_pos, &eye_orient, kHudRenderZoom);
+      RenderHUDFrame();
+      g3_EndFrame();
       EndFrame();
       return rend_Screenshot();
     };
