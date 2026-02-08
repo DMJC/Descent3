@@ -300,7 +300,7 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
   rend_SetLighting(LS_NONE);
   rend_SetAlphaType(AT_CONSTANT);
   rend_SetAlphaValue(255);
-  rend_SetColorModel(CM_TEXTURE);
+  rend_SetColorModel(CM_RGB);
   rend_SetOverlayType(OT_NONE);
   rend_SetWrapType(WT_CLAMP);
   rend_SetFiltering(1);
