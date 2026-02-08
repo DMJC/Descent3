@@ -1695,7 +1695,7 @@ void rend_DrawSpecialLine(g3Point *p0, g3Point *p1) {
 }
 
 // Takes a screenshot of the current frame and puts it into the handle passed
-std::unique_ptr<NewBitmap> rend_Screenshot() {
+std::unique_ptr<NewBitmap> rend_Screenshot(bool read_front_buffer) {
   auto result =
       std::make_unique<NewBitmap>(gpu_state.screen_width, gpu_state.screen_height, PixelDataFormat::RGBA32, true);
 
@@ -1703,10 +1703,23 @@ std::unique_ptr<NewBitmap> rend_Screenshot() {
     return nullptr;
   }
 
+  GLint previous_read_buffer = GL_BACK;
+  dglGetIntegerv(GL_READ_BUFFER, &previous_read_buffer);
+
+  if (GOpenGLFBO != 0) {
+    dglReadBuffer(GL_COLOR_ATTACHMENT0);
+  } else {
+    dglReadBuffer(read_front_buffer ? GL_FRONT : GL_BACK);
+  }
   dglReadPixels(0, 0, gpu_state.screen_width, gpu_state.screen_height, GL_RGBA, GL_UNSIGNED_BYTE,
                 (GLvoid *)result->getData());
+  dglReadBuffer(previous_read_buffer);
 
   return result;
+}
+
+std::unique_ptr<NewBitmap> rend_Screenshot() {
+  return rend_Screenshot(false);
 }
 
 // Takes a screenshot of the current frame and puts it into the handle passed

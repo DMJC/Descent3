@@ -839,6 +839,7 @@
 #include "weather.h"
 #include "stringtable.h"
 #include "voice.h"
+#include "vecmat.h"
 #include "soundload.h"
 #include "sounds.h"
 #include "ambient.h"
@@ -2485,6 +2486,9 @@ void GameRenderWorld(object *viewer, vector *viewer_eye, int viewer_roomnum, mat
     viewer->orient = save_orient;
 }
 
+// Added by Samir
+#define HUD_RENDER_ZOOM 0.56f
+
 // Render into the big window
 void GameDrawMainView() {
   extern bool Guided_missile_smallview; // smallviews.cpp
@@ -2506,6 +2510,7 @@ void GameDrawMainView() {
     matrix view_orient = Viewer_object->orient;
     matrix saved_orient;
     bool restore_viewer = false;
+    static bool vr_fallback_logged = false;
     if (rear_view) {
       view_orient.fvec = -view_orient.fvec;
       view_orient.rvec = -view_orient.rvec;
@@ -2516,14 +2521,35 @@ void GameDrawMainView() {
       }
     }
 
-    const float eye_offset = VR_GetStereoEyeSeparation() * 0.5f;
     auto render_eye = [&](float eye_sign) {
-      vector eye_pos = Viewer_object->pos + (view_orient.rvec * (eye_sign * eye_offset));
+      vector eye_offset = {};
+      matrix eye_rotation = {};
+      vector eye_pos = Viewer_object->pos;
+      matrix eye_orient = view_orient;
+      if (VR_GetEyePose(eye_sign < 0.0f, eye_offset, eye_rotation)) {
+        vector world_offset;
+        vm_MatrixMulVector(&world_offset, &eye_offset, &view_orient);
+        eye_pos = Viewer_object->pos + world_offset;
+        vm_MatrixMul(&eye_orient, &view_orient, &eye_rotation);
+      } else {
+        if (!vr_fallback_logged) {
+          LOG_WARNING << "VR: Using positional eye separation fallback (OpenVR eye pose unavailable).";
+          vr_fallback_logged = true;
+        }
+        const float fallback_offset = VR_GetStereoEyeSeparation() * 0.5f;
+        eye_pos = Viewer_object->pos + (view_orient.rvec * (eye_sign * fallback_offset));
+      }
       StartFrame(false);
       rend_ClearScreen(GR_BLACK);
-      GameRenderWorld(Viewer_object, &eye_pos, Viewer_object->roomnum, &view_orient, Render_zoom, false);
+      GameRenderWorld(Viewer_object, &eye_pos, Viewer_object->roomnum, &eye_orient, Render_zoom, false);
       DoMatcensRenderFrame();
       ProcessRenderEvents();
+      if (!HUD_disabled) {
+        g3_StartFrame(&eye_pos, &eye_orient, HUD_RENDER_ZOOM);
+        RenderHUDFrame();
+        RenderAuxHUDFrame();
+        g3_EndFrame();
+      }
       EndFrame();
       return rend_Screenshot();
     };
@@ -2554,9 +2580,6 @@ void GameDrawMainView() {
     Viewer_object = save_view;
 
 }
-
-// Added by Samir
-#define HUD_RENDER_ZOOM 0.56f
 
 // Do Cockpit/Hud
 void GameDrawHud() {

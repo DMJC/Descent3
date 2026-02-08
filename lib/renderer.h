@@ -544,6 +544,10 @@ void rend_SetWrapType(wrap_type val);
 /// Takes a screenshot of the current frame and returns a NewBitmap
 std::unique_ptr<NewBitmap> rend_Screenshot();
 
+/// Takes a screenshot of the current frame. If read_front_buffer is true and no FBO is bound,
+/// the front buffer is read instead of the back buffer.
+std::unique_ptr<NewBitmap> rend_Screenshot(bool read_front_buffer);
+
 // Takes a screenshot of the current frame and puts it into the handle passed
 void rend_Screenshot(int bm_handle);
 

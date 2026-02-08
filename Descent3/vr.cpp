@@ -42,6 +42,7 @@ bool Vr_openvr_ready = false;
 VrRenderMode Vr_render_mode = VrRenderMode::Cinema;
 vr::IVRSystem *Vr_system = nullptr;
 float Vr_eye_separation = 0.064f;
+bool Vr_swap_eyes = false;
 uint32_t Vr_submit_width = 0;
 uint32_t Vr_submit_height = 0;
 struct VrSubmitSurface {
@@ -338,6 +339,7 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
 void VR_InitFromCommandLine() {
   Vr_enabled = FindArg("-vr") != 0 || FindArg("-vrstereo") != 0;
   Vr_render_mode = FindArg("-vrstereo") ? VrRenderMode::Stereo : VrRenderMode::Cinema;
+  Vr_swap_eyes = FindArg("-vrswap") != 0;
   if (!Vr_enabled) {
     return;
   }
@@ -372,6 +374,9 @@ void VR_InitFromCommandLine() {
     Vr_system->GetRecommendedRenderTargetSize(&target_w, &target_h);
     const char *mode_label = (Vr_render_mode == VrRenderMode::Stereo) ? "stereo" : "cinema";
     LOG_INFO.printf("OpenVR enabled via -vr (%s). Recommended render target %ux%u.", mode_label, target_w, target_h);
+    if (Vr_swap_eyes) {
+      LOG_INFO << "OpenVR: Swapping left/right eye submission (-vrswap).";
+    }
   }
 }
 
@@ -389,6 +394,29 @@ bool VR_IsStereoRendering() {
 
 float VR_GetStereoEyeSeparation() {
   return Vr_enabled ? Vr_eye_separation : 0.0f;
+}
+
+bool VR_GetEyePose(bool left_eye, vector &offset, matrix &orientation) {
+  if (!Vr_openvr_ready || !Vr_system) {
+    return false;
+  }
+
+  const vr::HmdMatrix34_t eye_to_head =
+      Vr_system->GetEyeToHeadTransform(left_eye ? vr::Eye_Left : vr::Eye_Right);
+
+  orientation.rvec = {eye_to_head.m[0][0], eye_to_head.m[1][0], eye_to_head.m[2][0]};
+  orientation.uvec = {eye_to_head.m[0][1], eye_to_head.m[1][1], eye_to_head.m[2][1]};
+  orientation.fvec = {eye_to_head.m[0][2], eye_to_head.m[1][2], eye_to_head.m[2][2]};
+
+  vector translation = {eye_to_head.m[0][3], eye_to_head.m[1][3], eye_to_head.m[2][3]};
+  vm_MatrixMulVector(&offset, &translation, &orientation);
+  offset = -offset;
+
+  return true;
+}
+
+bool VR_ShouldSwapEyes() {
+  return Vr_swap_eyes;
 }
 
 void VR_RenderMenuFrame() {
@@ -411,21 +439,9 @@ void VR_RenderMenuFrame() {
     return;
   }
 
-  auto screenshot = rend_Screenshot();
+  auto screenshot = rend_Screenshot(true);
   if (screenshot && screenshot->getData()) {
     VR_UpdateMenuTexture(*screenshot);
-    if (Vr_render_mode == VrRenderMode::Stereo) {
-      if (!VR_EnsureSubmitSurface(Vr_submit_left) || !VR_EnsureSubmitSurface(Vr_submit_right)) {
-        return;
-      }
-      VR_UpdateSubmitSurface(*screenshot, Vr_submit_left, true);
-      VR_UpdateSubmitSurface(*screenshot, Vr_submit_right, true);
-    } else {
-      if (!VR_EnsureSubmitSurface(Vr_submit_cinema)) {
-        return;
-      }
-      VR_UpdateSubmitSurface(*screenshot, Vr_submit_cinema, true);
-    }
   }
 
   StartFrame(0, 0, Max_window_w, Max_window_h);
@@ -440,6 +456,22 @@ void VR_RenderMenuFrame() {
   VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max);
 
   g3_EndFrame();
+  auto curved_frame = rend_Screenshot();
+  if (curved_frame && curved_frame->getData()) {
+    if (Vr_render_mode == VrRenderMode::Stereo) {
+      if (!VR_EnsureSubmitSurface(Vr_submit_left) || !VR_EnsureSubmitSurface(Vr_submit_right)) {
+        return;
+      }
+      VR_UpdateSubmitSurface(*curved_frame, Vr_submit_left, false);
+      VR_UpdateSubmitSurface(*curved_frame, Vr_submit_right, false);
+    } else {
+      if (!VR_EnsureSubmitSurface(Vr_submit_cinema)) {
+        return;
+      }
+      VR_UpdateSubmitSurface(*curved_frame, Vr_submit_cinema, false);
+    }
+  }
+
   EndFrame();
 
   if (Vr_openvr_ready && vr::VRCompositor()) {
@@ -480,8 +512,13 @@ void VR_SubmitStereoFrame(const NewBitmap &left, const NewBitmap &right) {
     return;
   }
 
-  VR_UpdateSubmitSurface(left, Vr_submit_left, false);
-  VR_UpdateSubmitSurface(right, Vr_submit_right, false);
+  const NewBitmap *left_view = &left;
+  const NewBitmap *right_view = &right;
+  if (Vr_swap_eyes) {
+    std::swap(left_view, right_view);
+  }
+  VR_UpdateSubmitSurface(*left_view, Vr_submit_left, false);
+  VR_UpdateSubmitSurface(*right_view, Vr_submit_right, false);
 
   if (Vr_openvr_ready && vr::VRCompositor()) {
     vr::Texture_t left_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
