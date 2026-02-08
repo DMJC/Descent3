@@ -325,10 +325,11 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
     const float u0 = static_cast<float>(i) / static_cast<float>(kSegments);
     const float u1 = static_cast<float>(i + 1) / static_cast<float>(kSegments);
 
-    points[0].p3_flags |= PF_UV;
-    points[1].p3_flags |= PF_UV;
-    points[2].p3_flags |= PF_UV;
-    points[3].p3_flags |= PF_UV;
+    for (auto &point : points) {
+      point.p3_flags |= PF_UV | PF_L;
+      g3_CodePoint(&point);
+      point.p3_l = 1.0f;
+    }
 
     points[0].p3_u = u0 * u_max;
     points[0].p3_v = 0.0f;
