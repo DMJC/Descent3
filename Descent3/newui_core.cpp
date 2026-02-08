@@ -630,9 +630,18 @@ void DoUIFrame() {
       Sound_system.EndSoundFrame();
     }
 
+    // NEW: If VR is enabled, render UI to offscreen FBO first
+    if (VR_IsEnabled() && GetFunctionMode() == MENU_MODE) {
+      VR_BeginMenuFramebufferRender();
+    }
+
     UI_frame_result = ui_DoFrame();
 
+    // NEW: End FBO rendering and switch back to window
     if (VR_IsEnabled() && GetFunctionMode() == MENU_MODE) {
+      VR_EndMenuFramebufferRender();
+      
+      // Now render the VR cinema screen using the FBO texture
       VR_RenderMenuFrame();
     }
   }

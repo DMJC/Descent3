@@ -31,9 +31,16 @@ bool VR_IsEnabled();
 VrRenderMode VR_GetRenderMode();
 bool VR_IsStereoRendering();
 float VR_GetStereoEyeSeparation();
-void VR_RenderMenuFrame();
 void VR_SubmitStereoFrame(const NewBitmap &left, const NewBitmap &right);
+void VR_BeginMenuFramebufferRender();
+void VR_EndMenuFramebufferRender();
+void VR_RenderMenuFrame();
 void VR_ResetGraphicsResources();
 void VR_Shutdown();
 
 #endif
+
+
+
+
+

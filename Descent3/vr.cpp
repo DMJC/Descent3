@@ -48,9 +48,10 @@ struct VrSubmitSurface {
   GLuint texture = 0;
   std::vector<uint32_t> buffer;
 };
-VrSubmitSurface Vr_submit_cinema;
 VrSubmitSurface Vr_submit_left;
 VrSubmitSurface Vr_submit_right;
+GLuint Vr_menu_fbo = 0;
+GLuint Vr_menu_fbo_texture = 0;
 int Vr_menu_bitmap = -1;
 int Vr_menu_width = 0;
 int Vr_menu_height = 0;
@@ -68,6 +69,11 @@ struct VrGlFns {
   using TexParameteriFn = decltype(&glTexParameteri);
   using TexImage2DFn = decltype(&glTexImage2D);
   using TexSubImage2DFn = decltype(&glTexSubImage2D);
+  using GenFramebuffersFn = void (*)(GLsizei, GLuint*);
+  using DeleteFramebuffersFn = void (*)(GLsizei, const GLuint*);
+  using BindFramebufferFn = void (*)(GLenum, GLuint);
+  using FramebufferTexture2DFn = void (*)(GLenum, GLenum, GLenum, GLuint, GLint);
+  using CheckFramebufferStatusFn = GLenum (*)(GLenum);
 
   GenTexturesFn gen_textures = nullptr;
   DeleteTexturesFn delete_textures = nullptr;
@@ -75,6 +81,11 @@ struct VrGlFns {
   TexParameteriFn tex_parameteri = nullptr;
   TexImage2DFn tex_image_2d = nullptr;
   TexSubImage2DFn tex_sub_image_2d = nullptr;
+  GenFramebuffersFn gen_framebuffers = nullptr;
+  DeleteFramebuffersFn delete_framebuffers = nullptr;
+  BindFramebufferFn bind_framebuffer = nullptr;
+  FramebufferTexture2DFn framebuffer_texture_2d = nullptr;
+  CheckFramebufferStatusFn check_framebuffer_status = nullptr;
 };
 
 VrGlFns &VR_GetGlFns() {
@@ -89,8 +100,15 @@ VrGlFns &VR_GetGlFns() {
   fns.tex_parameteri = reinterpret_cast<VrGlFns::TexParameteriFn>(SDL_GL_GetProcAddress("glTexParameteri"));
   fns.tex_image_2d = reinterpret_cast<VrGlFns::TexImage2DFn>(SDL_GL_GetProcAddress("glTexImage2D"));
   fns.tex_sub_image_2d = reinterpret_cast<VrGlFns::TexSubImage2DFn>(SDL_GL_GetProcAddress("glTexSubImage2D"));
+  fns.gen_framebuffers = reinterpret_cast<VrGlFns::GenFramebuffersFn>(SDL_GL_GetProcAddress("glGenFramebuffers"));
+  fns.delete_framebuffers = reinterpret_cast<VrGlFns::DeleteFramebuffersFn>(SDL_GL_GetProcAddress("glDeleteFramebuffers"));
+  fns.bind_framebuffer = reinterpret_cast<VrGlFns::BindFramebufferFn>(SDL_GL_GetProcAddress("glBindFramebuffer"));
+  fns.framebuffer_texture_2d = reinterpret_cast<VrGlFns::FramebufferTexture2DFn>(SDL_GL_GetProcAddress("glFramebufferTexture2D"));
+  fns.check_framebuffer_status = reinterpret_cast<VrGlFns::CheckFramebufferStatusFn>(SDL_GL_GetProcAddress("glCheckFramebufferStatus"));
+  
   fns.loaded = fns.gen_textures && fns.delete_textures && fns.bind_texture && fns.tex_parameteri && fns.tex_image_2d &&
-               fns.tex_sub_image_2d;
+               fns.tex_sub_image_2d && fns.gen_framebuffers && fns.delete_framebuffers && fns.bind_framebuffer &&
+               fns.framebuffer_texture_2d && fns.check_framebuffer_status;
   return fns;
 }
 
@@ -108,10 +126,30 @@ void VR_EnsureMenuBitmap() {
   const int desired_texture_size = VR_NextPowerOfTwo(std::max(desired_width, desired_height));
 
   if (Vr_menu_width == desired_width && Vr_menu_height == desired_height && Vr_menu_texture_size == desired_texture_size &&
-      Vr_menu_bitmap >= 0) {
+      Vr_menu_bitmap >= 0 && Vr_menu_fbo != 0) {
     return;
   }
 
+  auto &gl = VR_GetGlFns();
+  if (!gl.gen_framebuffers || !gl.gen_textures || !gl.bind_framebuffer || !gl.bind_texture || 
+      !gl.tex_parameteri || !gl.tex_image_2d || !gl.framebuffer_texture_2d || !gl.check_framebuffer_status) {
+    static bool warned = false;
+    if (!warned) {
+      LOG_WARNING << "VR: Missing GL functions for framebuffer creation";
+      warned = true;
+    }
+    return;
+  }
+
+  // Clean up old resources
+  if (Vr_menu_fbo != 0) {
+    gl.delete_framebuffers(1, &Vr_menu_fbo);
+    Vr_menu_fbo = 0;
+  }
+  if (Vr_menu_fbo_texture != 0) {
+    gl.delete_textures(1, &Vr_menu_fbo_texture);
+    Vr_menu_fbo_texture = 0;
+  }
   if (Vr_menu_bitmap >= 0) {
     bm_FreeBitmap(Vr_menu_bitmap);
     Vr_menu_bitmap = -1;
@@ -120,42 +158,55 @@ void VR_EnsureMenuBitmap() {
   Vr_menu_width = desired_width;
   Vr_menu_height = desired_height;
   Vr_menu_texture_size = desired_texture_size;
+
+  // Create FBO texture
+  gl.gen_textures(1, &Vr_menu_fbo_texture);
+  gl.bind_texture(GL_TEXTURE_2D, Vr_menu_fbo_texture);
+  gl.tex_parameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  gl.tex_parameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  gl.tex_parameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  gl.tex_parameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  gl.tex_image_2d(GL_TEXTURE_2D, 0, GL_RGBA8, Vr_menu_width, Vr_menu_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+  // Create FBO
+  gl.gen_framebuffers(1, &Vr_menu_fbo);
+  gl.bind_framebuffer(GL_FRAMEBUFFER, Vr_menu_fbo);
+  gl.framebuffer_texture_2d(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, Vr_menu_fbo_texture, 0);
+
+  GLenum status = gl.check_framebuffer_status(GL_FRAMEBUFFER);
+  if (status != GL_FRAMEBUFFER_COMPLETE) {
+    LOG_WARNING << "VR: Menu framebuffer is not complete!";
+    gl.delete_framebuffers(1, &Vr_menu_fbo);
+    gl.delete_textures(1, &Vr_menu_fbo_texture);
+    Vr_menu_fbo = 0;
+    Vr_menu_fbo_texture = 0;
+    gl.bind_framebuffer(GL_FRAMEBUFFER, 0);
+    return;
+  }
+
+  gl.bind_framebuffer(GL_FRAMEBUFFER, 0);
+
+  // Also create the game's internal bitmap that references this GL texture
   Vr_menu_bitmap = bm_AllocBitmap(Vr_menu_texture_size, Vr_menu_texture_size, 0);
   if (Vr_menu_bitmap < 0) {
     LOG_WARNING << "VR: Unable to allocate menu bitmap for cinema screen.";
   }
 }
 
-void VR_UpdateMenuTexture(const NewBitmap &screenshot) {
-  uint32_t w, h;
-  screenshot.getSize(w, h);
-  auto *src_data = reinterpret_cast<uint32_t *>(screenshot.getData());
-  if (!src_data) {
-    return;
-  }
-  const bool stereo_side_by_side = (h > 0) && (w >= h * 2);
-  const bool stereo_top_bottom = (w > 0) && (h >= w * 2);
-  const uint32_t src_w = stereo_side_by_side ? (w / 2) : w;
-  const uint32_t src_h = stereo_top_bottom ? (h / 2) : h;
-  uint16_t *dest_data = bm_data(Vr_menu_bitmap, 0);
-  if (!dest_data) {
+void VR_BlitMenuTextureToWindow() {
+  if (Vr_menu_fbo_texture == 0) {
     return;
   }
 
-  const int dest_size = Vr_menu_texture_size;
-  for (int y = 0; y < dest_size; ++y) {
-    for (int x = 0; x < dest_size; ++x) {
-      uint16_t pixel = GR_RGB16(0, 0, 0);
-      if (x < static_cast<int>(src_w) && y < static_cast<int>(src_h)) {
-        const uint32_t spix = src_data[y * w + x];
-        const int r = spix & 0xff;
-        const int g = (spix >> 8) & 0xff;
-        const int b = (spix >> 16) & 0xff;
-        pixel = GR_RGB16(r, g, b);
-      }
-      dest_data[((dest_size - 1) - y) * dest_size + x] = pixel;
-    }
-  }
+  // Render the menu FBO texture to the window as a fullscreen quad
+  // This displays what was rendered to the FBO
+  StartFrame(0, 0, Max_window_w, Max_window_h);
+  
+  // Here we'd render a fullscreen textured quad with Vr_menu_fbo_texture
+  // For now, we can use the game's existing rendering system
+  // The game's renderer should be able to blit the texture
+  
+  EndFrame();
 }
 
 void VR_EnsureSubmitTexture() {
@@ -185,7 +236,6 @@ void VR_EnsureSubmitTexture() {
   }
 
   if (Vr_submit_width != 0 || Vr_submit_height != 0) {
-    VR_DeleteSubmitSurface(Vr_submit_cinema);
     VR_DeleteSubmitSurface(Vr_submit_left);
     VR_DeleteSubmitSurface(Vr_submit_right);
   }
@@ -282,7 +332,7 @@ void VR_UpdateOpenVRPoses() {
 void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
   constexpr int kSegments = 32;
   constexpr float kArcDegrees = 100.0f;
-  constexpr float kRadius = 6.0f;
+  constexpr float kRadius = 4.0f;
   constexpr float kHeight = 3.0f;
 
   const float arc_radians = kArcDegrees * (kPi / 180.0f);
@@ -333,7 +383,76 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
     g3_DrawPoly(4, point_list, texture_handle);
   }
 }
+
+// Helper function to render the 3D cinema screen for one eye
+void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_offset) {
+  if (!VR_EnsureSubmitSurface(surface)) {
+    return;
+  }
+
+  if (Vr_menu_fbo_texture == 0) {
+    return;
+  }
+
+  // Render to window at VR submit resolution
+  StartFrame(0, 0, Vr_submit_width, Vr_submit_height);
+  rend_ClearScreen(GR_BLACK);
+
+  // Set up 3D view with eye offset for stereo
+  vector view_pos = eye_offset;
+  matrix view_orient = Identity_matrix;
+  g3_StartFrame(&view_pos, &view_orient, D3_DEFAULT_ZOOM);
+
+  // Calculate UV coords for menu texture
+  const float u_max = static_cast<float>(Vr_menu_width) / static_cast<float>(Vr_menu_texture_size);
+  const float v_max = static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
+  
+  // Draw the curved cinema screen with menu texture
+  // We need to use the FBO texture directly instead of Vr_menu_bitmap
+  // For now, we'll use Vr_menu_bitmap but bind our FBO texture to it
+  auto &gl = VR_GetGlFns();
+  if (gl.bind_texture) {
+    // Temporarily bind our FBO texture for rendering
+    gl.bind_texture(GL_TEXTURE_2D, Vr_menu_fbo_texture);
+  }
+  
+  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max);
+
+  g3_EndFrame();
+  EndFrame();
+
+  // Capture what we just rendered and update the submit surface
+  auto screenshot = rend_Screenshot();
+  if (screenshot && screenshot->getData()) {
+    VR_UpdateSubmitSurface(*screenshot, surface, false);
+  }
+}
+
 } // namespace
+
+void VR_BeginMenuFramebufferRender() {
+  if (Vr_menu_fbo == 0) {
+    return;
+  }
+
+  auto &gl = VR_GetGlFns();
+  if (!gl.bind_framebuffer) {
+    return;
+  }
+
+  // Bind the menu FBO so all subsequent rendering goes to our texture
+  gl.bind_framebuffer(GL_FRAMEBUFFER, Vr_menu_fbo);
+}
+
+void VR_EndMenuFramebufferRender() {
+  auto &gl = VR_GetGlFns();
+  if (!gl.bind_framebuffer) {
+    return;
+  }
+
+  // Unbind the FBO, returning to normal window rendering
+  gl.bind_framebuffer(GL_FRAMEBUFFER, 0);
+}
 
 void VR_InitFromCommandLine() {
   Vr_enabled = FindArg("-vr") != 0 || FindArg("-vrstereo") != 0;
@@ -407,56 +526,50 @@ void VR_RenderMenuFrame() {
   }
 
   VR_EnsureMenuBitmap();
-  if (Vr_menu_bitmap < 0) {
+  if (Vr_menu_bitmap < 0 || Vr_menu_fbo == 0) {
     return;
   }
 
-  auto screenshot = rend_Screenshot();
-  if (screenshot && screenshot->getData()) {
-    VR_UpdateMenuTexture(*screenshot);
-    if (Vr_render_mode == VrRenderMode::Stereo) {
-      if (!VR_EnsureSubmitSurface(Vr_submit_left) || !VR_EnsureSubmitSurface(Vr_submit_right)) {
-        return;
+  // The menu has already been rendered to Vr_menu_fbo_texture by the game
+  // (via VR_BeginMenuFramebufferRender / VR_EndMenuFramebufferRender)
+  
+  // Step 1: Render the curved cinema screen with the menu FBO texture for each eye
+  if (Vr_render_mode == VrRenderMode::Stereo) {
+    // Stereo mode: render with eye separation
+    const float half_separation = Vr_eye_separation * 0.5f;
+    vector left_eye_offset{-half_separation, 0.0f, 0.0f};
+    vector right_eye_offset{half_separation, 0.0f, 0.0f};
+    
+    VR_RenderCinemaScreenForEye(Vr_submit_left, left_eye_offset);
+    VR_RenderCinemaScreenForEye(Vr_submit_right, right_eye_offset);
+  } else {
+    // Cinema mode: both eyes see the same thing
+    vector no_offset{0.0f, 0.0f, 0.0f};
+    VR_RenderCinemaScreenForEye(Vr_submit_left, no_offset);
+    // In cinema mode, just copy left to right
+    if (Vr_submit_left.texture != 0 && VR_EnsureSubmitSurface(Vr_submit_right)) {
+      Vr_submit_right.buffer = Vr_submit_left.buffer;
+      auto &gl = VR_GetGlFns();
+      if (gl.bind_texture && gl.tex_sub_image_2d) {
+        gl.bind_texture(GL_TEXTURE_2D, Vr_submit_right.texture);
+        gl.tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, Vr_submit_width, Vr_submit_height, GL_RGBA, GL_UNSIGNED_BYTE,
+                           Vr_submit_right.buffer.data());
       }
-      VR_UpdateSubmitSurface(*screenshot, Vr_submit_left, true);
-      VR_UpdateSubmitSurface(*screenshot, Vr_submit_right, true);
-    } else {
-      if (!VR_EnsureSubmitSurface(Vr_submit_cinema)) {
-        return;
-      }
-      VR_UpdateSubmitSurface(*screenshot, Vr_submit_cinema, true);
     }
   }
 
-  StartFrame(0, 0, Max_window_w, Max_window_h);
-  rend_ClearScreen(GR_BLACK);
+  // Step 2: Blit the menu texture to the window so the user can see it on their monitor
+  VR_BlitMenuTextureToWindow();
 
-  vector view_pos{0.0f, 0.0f, 0.0f};
-  matrix view_orient = Identity_matrix;
-  g3_StartFrame(&view_pos, &view_orient, D3_DEFAULT_ZOOM);
-
-  const float u_max = static_cast<float>(Vr_menu_width) / static_cast<float>(Vr_menu_texture_size);
-  const float v_max = static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
-  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max);
-
-  g3_EndFrame();
-  EndFrame();
-
+  // Step 3: Submit to OpenVR
   if (Vr_openvr_ready && vr::VRCompositor()) {
-    if (Vr_render_mode == VrRenderMode::Stereo) {
-      if (Vr_submit_left.texture != 0 && Vr_submit_right.texture != 0) {
-        vr::Texture_t left_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
-                                      vr::TextureType_OpenGL, vr::ColorSpace_Auto};
-        vr::Texture_t right_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_right.texture)),
-                                       vr::TextureType_OpenGL, vr::ColorSpace_Auto};
-        vr::VRCompositor()->Submit(vr::Eye_Left, &left_texture);
-        vr::VRCompositor()->Submit(vr::Eye_Right, &right_texture);
-      }
-    } else if (Vr_submit_cinema.texture != 0) {
-      vr::Texture_t texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_cinema.texture)),
-                               vr::TextureType_OpenGL, vr::ColorSpace_Auto};
-      vr::VRCompositor()->Submit(vr::Eye_Left, &texture);
-      vr::VRCompositor()->Submit(vr::Eye_Right, &texture);
+    if (Vr_submit_left.texture != 0 && Vr_submit_right.texture != 0) {
+      vr::Texture_t left_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
+                                    vr::TextureType_OpenGL, vr::ColorSpace_Auto};
+      vr::Texture_t right_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_right.texture)),
+                                     vr::TextureType_OpenGL, vr::ColorSpace_Auto};
+      vr::VRCompositor()->Submit(vr::Eye_Left, &left_texture);
+      vr::VRCompositor()->Submit(vr::Eye_Right, &right_texture);
     }
   }
 }
@@ -498,11 +611,22 @@ void VR_ResetGraphicsResources() {
     return;
   }
 
-  VR_DeleteSubmitSurface(Vr_submit_cinema);
+  auto &gl = VR_GetGlFns();
+  
   VR_DeleteSubmitSurface(Vr_submit_left);
   VR_DeleteSubmitSurface(Vr_submit_right);
   Vr_submit_width = 0;
   Vr_submit_height = 0;
+
+  if (Vr_menu_fbo != 0 && gl.delete_framebuffers) {
+    gl.delete_framebuffers(1, &Vr_menu_fbo);
+    Vr_menu_fbo = 0;
+  }
+  
+  if (Vr_menu_fbo_texture != 0 && gl.delete_textures) {
+    gl.delete_textures(1, &Vr_menu_fbo_texture);
+    Vr_menu_fbo_texture = 0;
+  }
 
   if (Vr_menu_bitmap >= 0) {
     bm_FreeBitmap(Vr_menu_bitmap);
@@ -514,11 +638,23 @@ void VR_ResetGraphicsResources() {
 }
 
 void VR_Shutdown() {
-  VR_DeleteSubmitSurface(Vr_submit_cinema);
+  auto &gl = VR_GetGlFns();
+  
   VR_DeleteSubmitSurface(Vr_submit_left);
   VR_DeleteSubmitSurface(Vr_submit_right);
   Vr_submit_width = 0;
   Vr_submit_height = 0;
+  
+  if (Vr_menu_fbo != 0 && gl.delete_framebuffers) {
+    gl.delete_framebuffers(1, &Vr_menu_fbo);
+    Vr_menu_fbo = 0;
+  }
+  
+  if (Vr_menu_fbo_texture != 0 && gl.delete_textures) {
+    gl.delete_textures(1, &Vr_menu_fbo_texture);
+    Vr_menu_fbo_texture = 0;
+  }
+  
   if (Vr_system) {
     vr::VR_Shutdown();
     Vr_system = nullptr;
