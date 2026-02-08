@@ -298,8 +298,12 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
   rend_SetZBufferState(0);
   rend_SetTextureType(TT_LINEAR);
   rend_SetLighting(LS_NONE);
-  rend_SetAlphaType(AT_CONSTANT_TEXTURE);
+  rend_SetAlphaType(AT_CONSTANT);
   rend_SetAlphaValue(255);
+  rend_SetColorModel(CM_TEXTURE);
+  rend_SetOverlayType(OT_NONE);
+  rend_SetWrapType(WT_CLAMP);
+  rend_SetFiltering(1);
 
   for (int i = 0; i < kSegments; ++i) {
     const float a0 = start_angle + (delta * i);
