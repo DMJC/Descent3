@@ -441,34 +441,17 @@ void VR_RenderMenuFrame() {
 
   auto curved_screenshot = rend_Screenshot();
   if (curved_screenshot && curved_screenshot->getData()) {
-    if (VR_IsStereoRendering()) {
-      if (!VR_EnsureSubmitSurface(Vr_submit_left) || !VR_EnsureSubmitSurface(Vr_submit_right)) {
-        return;
-      }
-      VR_UpdateSubmitSurface(*curved_screenshot, Vr_submit_left, false, 0);
-      VR_UpdateSubmitSurface(*curved_screenshot, Vr_submit_right, false, 1);
-    } else {
-      if (!VR_EnsureSubmitSurface(Vr_submit_cinema)) {
-        return;
-      }
-      VR_UpdateSubmitSurface(*curved_screenshot, Vr_submit_cinema, false, 0);
+    if (!VR_EnsureSubmitSurface(Vr_submit_cinema)) {
+      return;
     }
+    VR_UpdateSubmitSurface(*curved_screenshot, Vr_submit_cinema, false, 0);
   }
 
   rend_ClearScreen(GR_BLACK);
   EndFrame();
 
   if (Vr_openvr_ready && vr::VRCompositor()) {
-    if (VR_IsStereoRendering()) {
-      if (Vr_submit_left.texture != 0 && Vr_submit_right.texture != 0) {
-        vr::Texture_t left_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
-                                      vr::TextureType_OpenGL, vr::ColorSpace_Auto};
-        vr::Texture_t right_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_right.texture)),
-                                       vr::TextureType_OpenGL, vr::ColorSpace_Auto};
-        vr::VRCompositor()->Submit(vr::Eye_Left, &left_texture);
-        vr::VRCompositor()->Submit(vr::Eye_Right, &right_texture);
-      }
-    } else if (Vr_submit_cinema.texture != 0) {
+    if (Vr_submit_cinema.texture != 0) {
       vr::Texture_t texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_cinema.texture)),
                                vr::TextureType_OpenGL, vr::ColorSpace_Auto};
       vr::VRCompositor()->Submit(vr::Eye_Left, &texture);
