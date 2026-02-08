@@ -331,13 +331,12 @@ void VR_UpdateOpenVRPoses() {
 
 void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
   constexpr int kSegments = 32;
-  constexpr float kArcDegrees = 100.0f;
-  constexpr float kRadius = 4.0f;
-  constexpr float kHeight = 3.0f;
+  constexpr float kCurveRadians = 1.0f;
+  constexpr float kRadius = 8.0f;
+  constexpr float kHeight = 5.0f;
 
-  const float arc_radians = kArcDegrees * (kPi / 180.0f);
-  const float start_angle = -arc_radians * 0.5f;
-  const float delta = arc_radians / static_cast<float>(kSegments);
+  const float start_angle = -0.5f * kCurveRadians;
+  const float delta = kCurveRadians / static_cast<float>(kSegments);
   const float half_height = kHeight * 0.5f;
 
   rend_SetZBufferState(0);
@@ -350,10 +349,10 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
     const float a0 = start_angle + (delta * i);
     const float a1 = a0 + delta;
 
-    vector p0{std::sin(a0) * kRadius, -half_height, std::cos(a0) * kRadius};
-    vector p1{std::sin(a1) * kRadius, -half_height, std::cos(a1) * kRadius};
-    vector p2{std::sin(a1) * kRadius, half_height, std::cos(a1) * kRadius};
-    vector p3{std::sin(a0) * kRadius, half_height, std::cos(a0) * kRadius};
+    vector p0{std::sin(a0) * kRadius, -half_height, -std::cos(a0) * kRadius};
+    vector p1{std::sin(a1) * kRadius, -half_height, -std::cos(a1) * kRadius};
+    vector p2{std::sin(a1) * kRadius, half_height, -std::cos(a1) * kRadius};
+    vector p3{std::sin(a0) * kRadius, half_height, -std::cos(a0) * kRadius};
 
     g3Point points[4];
     g3Point *point_list[4] = {&points[0], &points[1], &points[2], &points[3]};
@@ -372,13 +371,13 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
     points[3].p3_flags |= PF_UV;
 
     points[0].p3_u = u0 * u_max;
-    points[0].p3_v = 0.0f;
+    points[0].p3_v = v_max;
     points[1].p3_u = u1 * u_max;
-    points[1].p3_v = 0.0f;
+    points[1].p3_v = v_max;
     points[2].p3_u = u1 * u_max;
-    points[2].p3_v = v_max;
+    points[2].p3_v = 0.0f;
     points[3].p3_u = u0 * u_max;
-    points[3].p3_v = v_max;
+    points[3].p3_v = 0.0f;
 
     g3_DrawPoly(4, point_list, texture_handle);
   }
