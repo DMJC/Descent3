@@ -317,6 +317,11 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
     g3Point points[4];
     g3Point *point_list[4] = {&points[0], &points[1], &points[2], &points[3]};
 
+    points[0].p3_vecPreRot = p0;
+    points[1].p3_vecPreRot = p1;
+    points[2].p3_vecPreRot = p2;
+    points[3].p3_vecPreRot = p3;
+
     g3_RotatePoint(&points[0], &p0);
     g3_RotatePoint(&points[1], &p1);
     g3_RotatePoint(&points[2], &p2);
@@ -325,20 +330,23 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
     const float u0 = static_cast<float>(i) / static_cast<float>(kSegments);
     const float u1 = static_cast<float>(i + 1) / static_cast<float>(kSegments);
 
-    for (auto &point : points) {
-      point.p3_flags |= PF_UV | PF_L;
-      g3_CodePoint(&point);
-      point.p3_l = 1.0f;
-    }
+    g3UVL uvls[4]{};
+    uvls[0].u = u0 * u_max;
+    uvls[0].v = 0.0f;
+    uvls[1].u = u1 * u_max;
+    uvls[1].v = 0.0f;
+    uvls[2].u = u1 * u_max;
+    uvls[2].v = v_max;
+    uvls[3].u = u0 * u_max;
+    uvls[3].v = v_max;
 
-    points[0].p3_u = u0 * u_max;
-    points[0].p3_v = 0.0f;
-    points[1].p3_u = u1 * u_max;
-    points[1].p3_v = 0.0f;
-    points[2].p3_u = u1 * u_max;
-    points[2].p3_v = v_max;
-    points[3].p3_u = u0 * u_max;
-    points[3].p3_v = v_max;
+    for (int k = 0; k < 4; ++k) {
+      g3Point *point = &points[k];
+      point->p3_flags = PF_UV | PF_L | PF_ORIGPOINT;
+      g3_CodePoint(point);
+      point->p3_uvl = uvls[k];
+      point->p3_l = 1.0f;
+    }
 
     g3_DrawPoly(4, point_list, texture_handle);
   }
