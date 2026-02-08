@@ -146,17 +146,18 @@ void VR_UpdateMenuTexture(const NewBitmap &screenshot) {
   const int dest_size = Vr_menu_texture_size;
   for (int y = 0; y < dest_size; ++y) {
     for (int x = 0; x < dest_size; ++x) {
-      uint16_t pixel = GR_RGB16(0, 0, 0);
+      uint16_t pixel = OPAQUE_FLAG | GR_RGB16(0, 0, 0);
       if (x < static_cast<int>(src_w) && y < static_cast<int>(src_h)) {
         const uint32_t spix = src_data[y * w + x];
         const int r = spix & 0xff;
         const int g = (spix >> 8) & 0xff;
         const int b = (spix >> 16) & 0xff;
-        pixel = GR_RGB16(r, g, b);
+        pixel = OPAQUE_FLAG | GR_RGB16(r, g, b);
       }
       dest_data[((dest_size - 1) - y) * dest_size + x] = pixel;
     }
   }
+  GameBitmaps[Vr_menu_bitmap].flags |= BF_CHANGED;
 }
 
 void VR_EnsureSubmitTexture() {
