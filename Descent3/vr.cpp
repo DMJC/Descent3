@@ -42,6 +42,7 @@ bool Vr_openvr_ready = false;
 VrRenderMode Vr_render_mode = VrRenderMode::Cinema;
 vr::IVRSystem *Vr_system = nullptr;
 float Vr_eye_separation = 0.064f;
+bool Vr_swap_eyes = false;
 uint32_t Vr_submit_width = 0;
 uint32_t Vr_submit_height = 0;
 struct VrSubmitSurface {
@@ -338,6 +339,7 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
 void VR_InitFromCommandLine() {
   Vr_enabled = FindArg("-vr") != 0 || FindArg("-vrstereo") != 0;
   Vr_render_mode = FindArg("-vrstereo") ? VrRenderMode::Stereo : VrRenderMode::Cinema;
+  Vr_swap_eyes = FindArg("-vrswap") != 0;
   if (!Vr_enabled) {
     return;
   }
@@ -372,6 +374,9 @@ void VR_InitFromCommandLine() {
     Vr_system->GetRecommendedRenderTargetSize(&target_w, &target_h);
     const char *mode_label = (Vr_render_mode == VrRenderMode::Stereo) ? "stereo" : "cinema";
     LOG_INFO.printf("OpenVR enabled via -vr (%s). Recommended render target %ux%u.", mode_label, target_w, target_h);
+    if (Vr_swap_eyes) {
+      LOG_INFO << "OpenVR: Swapping left/right eye submission (-vrswap).";
+    }
   }
 }
 
@@ -408,6 +413,10 @@ bool VR_GetEyePose(bool left_eye, vector &offset, matrix &orientation) {
   offset = -offset;
 
   return true;
+}
+
+bool VR_ShouldSwapEyes() {
+  return Vr_swap_eyes;
 }
 
 void VR_RenderMenuFrame() {
@@ -503,8 +512,13 @@ void VR_SubmitStereoFrame(const NewBitmap &left, const NewBitmap &right) {
     return;
   }
 
-  VR_UpdateSubmitSurface(left, Vr_submit_left, false);
-  VR_UpdateSubmitSurface(right, Vr_submit_right, false);
+  const NewBitmap *left_view = &left;
+  const NewBitmap *right_view = &right;
+  if (Vr_swap_eyes) {
+    std::swap(left_view, right_view);
+  }
+  VR_UpdateSubmitSurface(*left_view, Vr_submit_left, false);
+  VR_UpdateSubmitSurface(*right_view, Vr_submit_right, false);
 
   if (Vr_openvr_ready && vr::VRCompositor()) {
     vr::Texture_t left_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),

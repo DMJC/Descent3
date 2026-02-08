@@ -2507,6 +2507,7 @@ void GameDrawMainView() {
     matrix view_orient = Viewer_object->orient;
     matrix saved_orient;
     bool restore_viewer = false;
+    static bool vr_fallback_logged = false;
     if (rear_view) {
       view_orient.fvec = -view_orient.fvec;
       view_orient.rvec = -view_orient.rvec;
@@ -2528,6 +2529,10 @@ void GameDrawMainView() {
         eye_pos = Viewer_object->pos + world_offset;
         vm_MatrixMul(&eye_orient, &view_orient, &eye_rotation);
       } else {
+        if (!vr_fallback_logged) {
+          LOG_WARNING << "VR: Using positional eye separation fallback (OpenVR eye pose unavailable).";
+          vr_fallback_logged = true;
+        }
         const float fallback_offset = VR_GetStereoEyeSeparation() * 0.5f;
         eye_pos = Viewer_object->pos + (view_orient.rvec * (eye_sign * fallback_offset));
       }

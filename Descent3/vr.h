@@ -34,6 +34,7 @@ VrRenderMode VR_GetRenderMode();
 bool VR_IsStereoRendering();
 float VR_GetStereoEyeSeparation();
 bool VR_GetEyePose(bool left_eye, vector &offset, matrix &orientation);
+bool VR_ShouldSwapEyes();
 void VR_RenderMenuFrame();
 void VR_SubmitStereoFrame(const NewBitmap &left, const NewBitmap &right);
 void VR_ResetGraphicsResources();
