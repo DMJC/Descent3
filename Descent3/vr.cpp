@@ -103,9 +103,7 @@ int VR_NextPowerOfTwo(int value) {
   return size;
 }
 
-void VR_EnsureMenuBitmap() {
-  const int desired_width = Max_window_w;
-  const int desired_height = Max_window_h;
+void VR_EnsureMenuBitmap(int desired_width, int desired_height) {
   const int desired_texture_size = VR_NextPowerOfTwo(std::max(desired_width, desired_height));
 
   if (Vr_menu_width == desired_width && Vr_menu_height == desired_height && Vr_menu_texture_size == desired_texture_size &&
@@ -424,14 +422,23 @@ void VR_RenderMenuFrame() {
     return;
   }
 
-  VR_EnsureMenuBitmap();
-  if (Vr_menu_bitmap < 0) {
-    return;
-  }
-
   auto screenshot = rend_Screenshot();
   if (screenshot && screenshot->getData()) {
+    uint32_t screenshot_width = 0;
+    uint32_t screenshot_height = 0;
+    screenshot->getSize(screenshot_width, screenshot_height);
+    if (screenshot_width == 0 || screenshot_height == 0) {
+      return;
+    }
+
+    VR_EnsureMenuBitmap(static_cast<int>(screenshot_width), static_cast<int>(screenshot_height));
+    if (Vr_menu_bitmap < 0) {
+      return;
+    }
+
     VR_UpdateMenuTexture(*screenshot);
+  } else {
+    return;
   }
 
   StartFrame(0, 0, Max_window_w, Max_window_h);
