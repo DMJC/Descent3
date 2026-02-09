@@ -17,6 +17,7 @@
 */
 
 #include "vr.h"
+#include "3d.h"
 
 #include <algorithm>
 #include <cmath>
@@ -474,8 +475,8 @@ void VR_EndMenuFramebufferRender() {
 }
 
 void VR_InitFromCommandLine() {
-  Vr_enabled = FindArg("-vr") != 0 || FindArg("-vrstereo") != 0;
-  Vr_render_mode = FindArg("-vrstereo") ? VrRenderMode::Stereo : VrRenderMode::Cinema;
+  Vr_enabled = FindArg("-vrstereo") != 0;
+  Vr_render_mode = VrRenderMode::Stereo;
   if (!Vr_enabled) {
     return;
   }
@@ -502,13 +503,27 @@ void VR_InitFromCommandLine() {
     if (separation > 0.0f) {
       Vr_eye_separation = separation;
     }
+
+    float left_l = 0.0f;
+    float left_r = 0.0f;
+    float left_t = 0.0f;
+    float left_b = 0.0f;
+    float right_l = 0.0f;
+    float right_r = 0.0f;
+    float right_t = 0.0f;
+    float right_b = 0.0f;
+    Vr_system->GetProjectionRaw(vr::Eye_Left, &left_l, &left_r, &left_t, &left_b);
+    Vr_system->GetProjectionRaw(vr::Eye_Right, &right_l, &right_r, &right_t, &right_b);
+
+    g3StereoFrustum left_frustum{left_l, left_r, left_t, left_b};
+    g3StereoFrustum right_frustum{right_l, right_r, right_t, right_b};
+    g3_SetStereoFrustum(&left_frustum, &right_frustum);
   }
 
   if (Vr_openvr_ready) {
     uint32_t target_w = kVrTargetWidth;
     uint32_t target_h = kVrTargetHeight;
-    const char *mode_label = (Vr_render_mode == VrRenderMode::Stereo) ? "stereo" : "cinema";
-    LOG_INFO.printf("OpenVR enabled via -vr (%s). Recommended render target %ux%u.", mode_label, target_w, target_h);
+    LOG_INFO.printf("OpenVR enabled via -vrstereo. Recommended render target %ux%u.", target_w, target_h);
   }
 }
 
@@ -680,4 +695,3 @@ void VR_Shutdown() {
   Vr_openvr_ready = false;
   Vr_enabled = false;
 }
-
