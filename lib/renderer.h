@@ -620,6 +620,7 @@ void rend_SetErrorMessage(const char *str);
 // Preuploads a bitmap to the card
 void rend_PreUploadTextureToCard(int, int);
 void rend_FreePreUploadedTexture(int, int);
+void rend_SetExternalBitmapTexture(int bm_handle, uint32_t texture_id);
 
 // Returns 1 if there is mid video memory, 2 if there is low vid memory, or 0 if there is large vid memory
 int rend_LowVidMem();

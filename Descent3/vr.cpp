@@ -331,13 +331,12 @@ void VR_UpdateOpenVRPoses() {
 
 void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
   constexpr int kSegments = 32;
-  constexpr float kArcDegrees = 100.0f;
-  constexpr float kRadius = 4.0f;
-  constexpr float kHeight = 3.0f;
+  constexpr float kCurveRadians = 1.0f;
+  constexpr float kRadius = 8.0f;
+  constexpr float kHeight = 5.0f;
 
-  const float arc_radians = kArcDegrees * (kPi / 180.0f);
-  const float start_angle = -arc_radians * 0.5f;
-  const float delta = arc_radians / static_cast<float>(kSegments);
+  const float start_angle = -0.5f * kCurveRadians;
+  const float delta = kCurveRadians / static_cast<float>(kSegments);
   const float half_height = kHeight * 0.5f;
 
   rend_SetZBufferState(0);
@@ -372,13 +371,13 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
     points[3].p3_flags |= PF_UV;
 
     points[0].p3_u = u0 * u_max;
-    points[0].p3_v = 0.0f;
+    points[0].p3_v = v_max;
     points[1].p3_u = u1 * u_max;
-    points[1].p3_v = 0.0f;
+    points[1].p3_v = v_max;
     points[2].p3_u = u1 * u_max;
-    points[2].p3_v = v_max;
+    points[2].p3_v = 0.0f;
     points[3].p3_u = u0 * u_max;
-    points[3].p3_v = v_max;
+    points[3].p3_v = 0.0f;
 
     g3_DrawPoly(4, point_list, texture_handle);
   }
@@ -408,14 +407,7 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   const float v_max = static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
   
   // Draw the curved cinema screen with menu texture
-  // We need to use the FBO texture directly instead of Vr_menu_bitmap
-  // For now, we'll use Vr_menu_bitmap but bind our FBO texture to it
-  auto &gl = VR_GetGlFns();
-  if (gl.bind_texture) {
-    // Temporarily bind our FBO texture for rendering
-    gl.bind_texture(GL_TEXTURE_2D, Vr_menu_fbo_texture);
-  }
-  
+  rend_SetExternalBitmapTexture(Vr_menu_bitmap, Vr_menu_fbo_texture);
   VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max);
 
   g3_EndFrame();
