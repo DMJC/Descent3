@@ -406,7 +406,8 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   StartFrame(0, 0, Vr_submit_width, Vr_submit_height);
 
   // Set up 3D view with eye offset for stereo
-  const vector menu_center_offset{0.5f, -3.5f, 16.0f};
+//  const vector menu_center_offset{0.5f, -3.5f, 16.0f};
+  const vector menu_center_offset{0.0f, 0.0f, 0.0f};
   vector view_pos = eye_offset + menu_center_offset;
   matrix view_orient = Identity_matrix;
   
@@ -475,7 +476,7 @@ void VR_EndMenuFramebufferRender() {
 }
 
 void VR_InitFromCommandLine() {
-  Vr_enabled = FindArg("-vrstereo") != 0;
+  Vr_enabled = FindArg("-vr") != 0;
   Vr_render_mode = VrRenderMode::Stereo;
   if (!Vr_enabled) {
     return;
@@ -517,13 +518,13 @@ void VR_InitFromCommandLine() {
 
     g3StereoFrustum left_frustum{left_l, left_r, left_t, left_b};
     g3StereoFrustum right_frustum{right_l, right_r, right_t, right_b};
-    g3_SetStereoFrustum(&left_frustum, &right_frustum);
+    g3_SetStereoFrustum(&right_frustum, &left_frustum);
   }
 
   if (Vr_openvr_ready) {
     uint32_t target_w = kVrTargetWidth;
     uint32_t target_h = kVrTargetHeight;
-    LOG_INFO.printf("OpenVR enabled via -vrstereo. Recommended render target %ux%u.", target_w, target_h);
+    LOG_INFO.printf("OpenVR enabled via -vr. Recommended render target %ux%u.", target_w, target_h);
   }
 }
 
