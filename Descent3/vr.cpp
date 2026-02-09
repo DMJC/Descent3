@@ -124,8 +124,6 @@ int VR_NextPowerOfTwo(int value) {
 }
 
 void VR_EnsureMenuBitmap() {
-//  const int desired_width = Max_window_w;
-//  const int desired_height = Max_window_h;
   const int desired_width = std::max<int>(Max_window_w, kVrTargetWidth);
   const int desired_height = std::max<int>(Max_window_h, kVrTargetHeight);
   const int desired_texture_size = VR_NextPowerOfTwo(std::max(desired_width, desired_height));
@@ -240,12 +238,6 @@ void VR_EnsureSubmitTexture() {
     return;
   }
 
-/*  uint32_t target_w = 0;
-  uint32_t target_h = 0;
-  Vr_system->GetRecommendedRenderTargetSize(&target_w, &target_h);
-  if (target_w == 0 || target_h == 0) {
-    return;
-  }*/
   uint32_t target_w = kVrTargetWidth;
   uint32_t target_h = kVrTargetHeight;
 
@@ -400,7 +392,7 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max, float arc
 }
 
 // Helper function to render the 3D cinema screen for one eye
-void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_offset) {
+void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_offset, bool is_left_eye) {
   if (!VR_EnsureSubmitSurface(surface)) {
     return;
   }
@@ -411,19 +403,22 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
 
   // Render to window at VR submit resolution
   StartFrame(0, 0, Vr_submit_width, Vr_submit_height);
-  rend_ClearScreen(GR_BLACK);
 
   // Set up 3D view with eye offset for stereo
-//  vector view_pos = eye_offset;
-// const vector menu_center_offset{22.0f, -11.0f, 0.0f};
-const vector menu_center_offset{0.5f, -3.5f, 16.0f};
+  const vector menu_center_offset{0.5f, -3.5f, 16.0f};
   vector view_pos = eye_offset + menu_center_offset;
-  // Set up 3D view centered between both eyes (monoscopic menu surface).
-//  vector view_pos{0.0f, 0.0f, 0.0f};
   matrix view_orient = Identity_matrix;
-  //g3_StartFrame(&view_pos, &view_orient, D3_DEFAULT_ZOOM);
+  
   constexpr float kMenuZoom = D3_DEFAULT_ZOOM * 1.35f;
-  g3_StartFrame(&view_pos, &view_orient, kMenuZoom);
+  constexpr float kConvergenceDistance = 16.0f; // Distance to the cinema screen
+  
+  // Use stereo rendering only in Stereo mode
+  if (Vr_render_mode == VrRenderMode::Stereo) {
+    g3_StartFrameStereo(&view_pos, &view_orient, kMenuZoom, is_left_eye, Vr_eye_separation, kConvergenceDistance);
+  } else {
+    // Cinema mode: no stereo projection, just regular rendering
+    g3_StartFrame(&view_pos, &view_orient, kMenuZoom);
+  }
 
   // Calculate UV coords for menu texture
   const float u_max = Vr_menu_texture_registered
@@ -434,22 +429,18 @@ const vector menu_center_offset{0.5f, -3.5f, 16.0f};
                           : static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
   
   // Draw the curved cinema screen with menu texture
-//  constexpr float kArcDegrees = 100.0f;
-//  constexpr float kRadius = 8.0f;
   constexpr float kArcDegrees = 10.0f;
   constexpr float kRadius = 20.0f;
   const float aspect_ratio =
       (Vr_submit_height > 0) ? static_cast<float>(Vr_submit_width) / static_cast<float>(Vr_submit_height) : 1.0f;
-  const float arc_radians = kArcDegrees * (kPi / 180.0f);
-  const float arc_length = 5; //kRadius * arc_radians;
-  const float target_height = 4; //arc_length / std::max(0.5f, aspect_ratio);
+  const float arc_length = 5;
+  const float target_height = 4;
   const float clamped_height = std::clamp(target_height, 1.0f, 3.5f);
   VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, kArcDegrees, kRadius, clamped_height);
 
   g3_EndFrame();
   EndFrame();
-
-  // Capture what we just rendered and update the submit surface
+  
   auto screenshot = rend_Screenshot();
   if (screenshot && screenshot->getData()) {
     VR_UpdateSubmitSurface(*screenshot, surface, false);
@@ -514,9 +505,6 @@ void VR_InitFromCommandLine() {
   }
 
   if (Vr_openvr_ready) {
-/*    uint32_t target_w = 0;
-    uint32_t target_h = 0;
-    Vr_system->GetRecommendedRenderTargetSize(&target_w, &target_h);*/
     uint32_t target_w = kVrTargetWidth;
     uint32_t target_h = kVrTargetHeight;
     const char *mode_label = (Vr_render_mode == VrRenderMode::Stereo) ? "stereo" : "cinema";
@@ -565,27 +553,18 @@ void VR_RenderMenuFrame() {
   
   // Step 1: Render the curved cinema screen with the menu FBO texture for each eye
   if (Vr_render_mode == VrRenderMode::Stereo) {
-    // Stereo mode: render with eye separation.
+    // Stereo mode: render with eye separation and proper stereo projection
     const float half_separation = Vr_eye_separation * 0.5f;
     vector left_eye_offset{-half_separation, 0.0f, 0.0f};
     vector right_eye_offset{half_separation, 0.0f, 0.0f};
 
-    VR_RenderCinemaScreenForEye(Vr_submit_left, left_eye_offset);
-    VR_RenderCinemaScreenForEye(Vr_submit_right, right_eye_offset);
+    VR_RenderCinemaScreenForEye(Vr_submit_left, left_eye_offset, true);  // true = left eye
+    VR_RenderCinemaScreenForEye(Vr_submit_right, right_eye_offset, false); // false = right eye
   } else {
-    // Cinema mode: both eyes see the same thing
+    // Cinema mode: both eyes see the same thing (no stereo effect)
     vector no_offset{0.0f, 0.0f, 0.0f};
-    VR_RenderCinemaScreenForEye(Vr_submit_left, no_offset);
-    // In cinema mode, just copy left to right
-    if (Vr_submit_left.texture != 0 && VR_EnsureSubmitSurface(Vr_submit_right)) {
-      Vr_submit_right.buffer = Vr_submit_left.buffer;
-      auto &gl = VR_GetGlFns();
-      if (gl.bind_texture && gl.tex_sub_image_2d) {
-        gl.bind_texture(GL_TEXTURE_2D, Vr_submit_right.texture);
-        gl.tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, Vr_submit_width, Vr_submit_height, GL_RGBA, GL_UNSIGNED_BYTE,
-                           Vr_submit_right.buffer.data());
-      }
-    }
+    VR_RenderCinemaScreenForEye(Vr_submit_left, no_offset, true);
+    VR_RenderCinemaScreenForEye(Vr_submit_right, no_offset, false);
   }
 
   // Step 2: Blit the menu texture to the window so the user can see it on their monitor
@@ -701,3 +680,4 @@ void VR_Shutdown() {
   Vr_openvr_ready = false;
   Vr_enabled = false;
 }
+

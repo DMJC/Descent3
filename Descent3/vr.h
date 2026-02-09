@@ -25,7 +25,6 @@ enum class VrRenderMode {
   Cinema,
   Stereo,
 };
-
 void VR_InitFromCommandLine();
 bool VR_IsEnabled();
 VrRenderMode VR_GetRenderMode();
