@@ -408,9 +408,13 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   rend_ClearScreen(GR_BLACK);
 
   // Set up 3D view with eye offset for stereo
-  vector view_pos = eye_offset;
+//  vector view_pos = eye_offset;
+ const vector menu_center_offset{22.0f, -10.0f, 0.0f};
+  vector view_pos = eye_offset + menu_center_offset;
   matrix view_orient = Identity_matrix;
-  g3_StartFrame(&view_pos, &view_orient, D3_DEFAULT_ZOOM);
+  //g3_StartFrame(&view_pos, &view_orient, D3_DEFAULT_ZOOM);
+  constexpr float kMenuZoom = D3_DEFAULT_ZOOM * 1.35f;
+  g3_StartFrame(&view_pos, &view_orient, kMenuZoom);
 
   // Calculate UV coords for menu texture
   const float u_max = Vr_menu_texture_registered
@@ -421,14 +425,16 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
                           : static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
   
   // Draw the curved cinema screen with menu texture
-  constexpr float kArcDegrees = 100.0f;
-  constexpr float kRadius = 4.0f;
+//  constexpr float kArcDegrees = 100.0f;
+//  constexpr float kRadius = 8.0f;
+  constexpr float kArcDegrees = 20.0f;
+  constexpr float kRadius = 20.0f;
   const float aspect_ratio =
       (Vr_submit_height > 0) ? static_cast<float>(Vr_submit_width) / static_cast<float>(Vr_submit_height) : 1.0f;
   const float arc_radians = kArcDegrees * (kPi / 180.0f);
-  const float arc_length = kRadius * arc_radians;
-  const float target_height = arc_length / std::max(0.5f, aspect_ratio);
-  const float clamped_height = std::clamp(target_height, 2.0f, 4.5f);
+  const float arc_length = 5; //kRadius * arc_radians;
+  const float target_height = 4; //arc_length / std::max(0.5f, aspect_ratio);
+  const float clamped_height = std::clamp(target_height, 1.0f, 3.5f);
   VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, kArcDegrees, kRadius, clamped_height);
 
   g3_EndFrame();
@@ -549,12 +555,24 @@ void VR_RenderMenuFrame() {
   // Step 1: Render the curved cinema screen with the menu FBO texture for each eye
   if (Vr_render_mode == VrRenderMode::Stereo) {
     // Stereo mode: render with eye separation
-    const float half_separation = Vr_eye_separation * 0.5f;
+/*    const float half_separation = Vr_eye_separation * 0.5f;
     vector left_eye_offset{-half_separation, 0.0f, 0.0f};
     vector right_eye_offset{half_separation, 0.0f, 0.0f};
     
     VR_RenderCinemaScreenForEye(Vr_submit_left, left_eye_offset);
-    VR_RenderCinemaScreenForEye(Vr_submit_right, right_eye_offset);
+    VR_RenderCinemaScreenForEye(Vr_submit_right, right_eye_offset);*/
+    // Stereo mode: render menu without eye separation to avoid doubled menu depth.
+    vector no_offset{0.0f, 0.0f, 0.0f};
+    VR_RenderCinemaScreenForEye(Vr_submit_left, no_offset);
+    if (Vr_submit_left.texture != 0 && VR_EnsureSubmitSurface(Vr_submit_right)) {
+      Vr_submit_right.buffer = Vr_submit_left.buffer;
+      auto &gl = VR_GetGlFns();
+      if (gl.bind_texture && gl.tex_sub_image_2d) {
+        gl.bind_texture(GL_TEXTURE_2D, Vr_submit_right.texture);
+        gl.tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, Vr_submit_width, Vr_submit_height, GL_RGBA, GL_UNSIGNED_BYTE,
+                           Vr_submit_right.buffer.data());
+      }
+    }
   } else {
     // Cinema mode: both eyes see the same thing
     vector no_offset{0.0f, 0.0f, 0.0f};
