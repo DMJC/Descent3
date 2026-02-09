@@ -614,6 +614,11 @@ void DoUIFrame() {
   if (Multi_bail_ui_menu) {
     UI_frame_result = NEWUIRES_FORCEQUIT;
   } else {
+    const bool vr_menu_mode = VR_IsEnabled() && GetFunctionMode() == MENU_MODE;
+    if (vr_menu_mode) {
+      VR_BeginMenuFramebufferRender();
+    }
+
     if (UI_callback)
       (*UI_callback)();
 
@@ -630,15 +635,10 @@ void DoUIFrame() {
       Sound_system.EndSoundFrame();
     }
 
-    // NEW: If VR is enabled, render UI to offscreen FBO first
-    if (VR_IsEnabled() && GetFunctionMode() == MENU_MODE) {
-      VR_BeginMenuFramebufferRender();
-    }
-
     UI_frame_result = ui_DoFrame();
 
-    // NEW: End FBO rendering and switch back to window
-    if (VR_IsEnabled() && GetFunctionMode() == MENU_MODE) {
+    if (vr_menu_mode) {
+      // End FBO rendering and switch back to window
       VR_EndMenuFramebufferRender();
       
       // Now render the VR cinema screen using the FBO texture
@@ -657,6 +657,11 @@ void DoUIFrameWithoutInput() {
   if (Multi_bail_ui_menu) {
     UI_frame_result = NEWUIRES_FORCEQUIT;
   } else {
+    const bool vr_menu_mode = VR_IsEnabled() && GetFunctionMode() == MENU_MODE;
+    if (vr_menu_mode) {
+      VR_BeginMenuFramebufferRender();
+    }
+
     if (UI_callback)
       (*UI_callback)();
 
@@ -674,6 +679,11 @@ void DoUIFrameWithoutInput() {
     }
 
     UI_frame_result = ui_DoFrame(false);
+
+    if (vr_menu_mode) {
+      VR_EndMenuFramebufferRender();
+      VR_RenderMenuFrame();
+    }
   }
 }
 
