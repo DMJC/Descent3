@@ -349,10 +349,10 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max) {
     const float a0 = start_angle + (delta * i);
     const float a1 = a0 + delta;
 
-    vector p0{std::sin(a0) * kRadius, -half_height, -std::cos(a0) * kRadius};
-    vector p1{std::sin(a1) * kRadius, -half_height, -std::cos(a1) * kRadius};
-    vector p2{std::sin(a1) * kRadius, half_height, -std::cos(a1) * kRadius};
-    vector p3{std::sin(a0) * kRadius, half_height, -std::cos(a0) * kRadius};
+    vector p0{std::sin(a0) * kRadius, -half_height, std::cos(a0) * kRadius};
+    vector p1{std::sin(a1) * kRadius, -half_height, std::cos(a1) * kRadius};
+    vector p2{std::sin(a1) * kRadius, half_height, std::cos(a1) * kRadius};
+    vector p3{std::sin(a0) * kRadius, half_height, std::cos(a0) * kRadius};
 
     g3Point points[4];
     g3Point *point_list[4] = {&points[0], &points[1], &points[2], &points[3]};
@@ -407,14 +407,7 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   const float v_max = static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
   
   // Draw the curved cinema screen with menu texture
-  // We need to use the FBO texture directly instead of Vr_menu_bitmap
-  // For now, we'll use Vr_menu_bitmap but bind our FBO texture to it
-  auto &gl = VR_GetGlFns();
-  if (gl.bind_texture) {
-    // Temporarily bind our FBO texture for rendering
-    gl.bind_texture(GL_TEXTURE_2D, Vr_menu_fbo_texture);
-  }
-  
+  rend_SetExternalBitmapTexture(Vr_menu_bitmap, Vr_menu_fbo_texture);
   VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max);
 
   g3_EndFrame();

@@ -1543,6 +1543,24 @@ void rend_ResetCache() {
   opengl_ResetCache();
 }
 
+void rend_SetExternalBitmapTexture(int bm_handle, uint32_t texture_id) {
+  if (Renderer_type != RENDERER_OPENGL || !OpenGL_cache_initted || !OpenGL_bitmap_remap) {
+    return;
+  }
+
+  if (bm_handle < 0 || bm_handle >= MAX_BITMAPS || texture_id == 0) {
+    return;
+  }
+
+  if (texture_id >= 65535) {
+    LOG_WARNING << "External bitmap texture id exceeds OpenGL cache limits.";
+    return;
+  }
+
+  OpenGL_bitmap_remap[bm_handle] = static_cast<uint16_t>(texture_id);
+  GameBitmaps[bm_handle].flags &= ~(BF_CHANGED | BF_BRAND_NEW);
+}
+
 // Fills a rectangle on the display
 void rend_FillRect(ddgr_color color, int x1, int y1, int x2, int y2) {
   int r = GR_COLOR_RED(color);
