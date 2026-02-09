@@ -131,6 +131,99 @@ void g3_StartFrame(vector *view_pos, matrix *view_matrix, float zoom) {
   g3_ResetFarClipZ();
 }
 
+// Add this new function
+void g3_GetStereoProjectionMatrix(float zoom, bool is_left_eye, float eye_separation, float convergence_distance, float *projMat) {
+  // get window size
+  int viewportWidth, viewportHeight;
+  rend_GetProjectionParameters(&viewportWidth, &viewportHeight);
+
+  float s = ((float)viewportWidth) / ((float)viewportHeight);
+  float vertical_fov = zoom * 3.0f / 4.0f;
+
+  // setup the matrix
+  memset(projMat, 0, sizeof(float) * 16);
+
+  // calculate 1/tan(fov)
+  float oOT = 1.0f / vertical_fov;
+
+  // Calculate the eye offset for this eye
+  float eye_offset = is_left_eye ? -eye_separation / 2.0f : eye_separation / 2.0f;
+  
+  // Calculate frustum shift based on convergence distance
+  // This assumes near plane is at distance 1.0 (adjust if different)
+  float near_plane = 1.0f; // You may need to adjust this
+  float frustum_shift = -eye_offset * (near_plane / convergence_distance);
+  
+  // Apply the asymmetric frustum offset
+  if (s <= 1.0f) {
+    projMat[0] = oOT;
+    projMat[5] = oOT * s;
+  } else {
+    projMat[0] = oOT / s;
+    projMat[5] = oOT;
+  }
+
+  // THIS IS THE KEY: Add horizontal offset for stereo (projMat[8])
+  projMat[8] = frustum_shift * projMat[0]; // Scale by horizontal FOV factor
+
+  projMat[10] = 1.0f;
+  projMat[11] = 1.0f;
+  projMat[14] = -1.0f;
+}
+
+// Add stereo version of g3_StartFrame
+void g3_StartFrameStereo(vector *view_pos, matrix *view_matrix, float zoom, bool is_left_eye, float eye_separation, float convergence_distance) {
+  // initialize the viewport transform
+  g3_GetViewPortMatrix((float *)gTransformViewPort);
+  
+  // USE STEREO PROJECTION instead of regular
+  g3_GetStereoProjectionMatrix(zoom, is_left_eye, eye_separation, convergence_distance, (float *)gTransformProjection);
+  
+  g3_GetModelViewMatrix(view_pos, view_matrix, (float *)gTransformModelView);
+  g3_UpdateFullTransform();
+
+  // ... rest of the function stays the same as g3_StartFrame ...
+  // (copy the remaining code from g3_StartFrame)
+    // get window size
+  rend_GetProjectionParameters(&Window_width, &Window_height);
+
+  // Set vars for projection
+  Window_w2 = ((scalar)Window_width) * 0.5f;
+  Window_h2 = ((scalar)Window_height) * 0.5f;
+
+  // ISB trick: use the window aspect only, screen aspect ratio
+  // is not important because we assume pixels are square
+  scalar s = (scalar)Window_height / (scalar)Window_width;
+
+  Matrix_scale = { s <= 1.0f ? s : 1.0f / s, 1.0f };
+
+  //ISB: Convert zoom into vertical FOV for convenience
+  zoom *= 3.f / 4.f;
+
+  Matrix_scale.z() = 1.0f;
+
+  // Set the view variables
+  View_position = *view_pos;
+  View_zoom = zoom;
+  Unscaled_matrix = *view_matrix;
+
+  // Scale x and y to zoom in or out;
+  float oOZ = 1.0f / View_zoom;
+  Matrix_scale.x() = Matrix_scale.x() * oOZ;
+  Matrix_scale.y() = Matrix_scale.y() * oOZ;
+
+  // Scale the matrix elements
+  View_matrix.rvec = Unscaled_matrix.rvec * Matrix_scale.x();
+  View_matrix.uvec = Unscaled_matrix.uvec * Matrix_scale.y();
+  View_matrix.fvec = Unscaled_matrix.fvec * Matrix_scale.z();
+
+  // Reset the list of free points
+  InitFreePoints();
+
+  // Reset the far clip plane
+  g3_ResetFarClipZ();
+}
+
 // this doesn't do anything, but is here for completeness
 void g3_EndFrame(void) {
   // make sure temp points are free

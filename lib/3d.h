@@ -262,6 +262,9 @@ struct g3Point {
 // start the frame, specifying view position, matrix, & zoom
 void g3_StartFrame(vector *view_pos, matrix *view_matrix, float zoom);
 
+// start the frame in stereoscopic 3D, specifying view position, matrix, & zoom
+void g3_StartFrameStereo(vector *view_pos, matrix *view_matrix, float zoom, bool is_left_eye, float eye_separation, float convergence_distance);
+
 // end the frame
 void g3_EndFrame(void);
 
