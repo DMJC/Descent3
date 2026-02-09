@@ -106,7 +106,8 @@ void GameFrame(void);
 //					zoom - the zoom for this view
 //					rear_view - if true, we're looking out the rear of this object
 void GameRenderWorld(object *viewer, vector *viewer_eye, int viewer_roomnum, matrix *viewer_orient, float zoom,
-                     bool rear_view);
+                     bool rear_view, bool stereo = false, bool is_left_eye = true, float eye_separation = 0.0f,
+                     float convergence_distance = 0.0f);
 
 extern float Render_FOV_setting;
 extern float Render_zoom;

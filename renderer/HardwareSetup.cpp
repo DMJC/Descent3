@@ -148,11 +148,11 @@ void g3_GetStereoProjectionMatrix(float zoom, bool is_left_eye, float eye_separa
 
   // Calculate the eye offset for this eye
   float eye_offset = is_left_eye ? -eye_separation / 2.0f : eye_separation / 2.0f;
-  
-  // Calculate frustum shift based on convergence distance
-  // This assumes near plane is at distance 1.0 (adjust if different)
-  float near_plane = 1.0f; // You may need to adjust this
-  float frustum_shift = -eye_offset * (near_plane / convergence_distance);
+  float frustum_shift = 0.0f;
+  if (convergence_distance > 0.0f && eye_separation != 0.0f) {
+    // Shift the frustum opposite of the eye offset so the convergence plane remains centered.
+    frustum_shift = -eye_offset / convergence_distance;
+  }
   
   // Apply the asymmetric frustum offset
   if (s <= 1.0f) {
