@@ -265,6 +265,15 @@ void g3_StartFrame(vector *view_pos, matrix *view_matrix, float zoom);
 // start the frame in stereoscopic 3D, specifying view position, matrix, & zoom
 void g3_StartFrameStereo(vector *view_pos, matrix *view_matrix, float zoom, bool is_left_eye, float eye_separation, float convergence_distance);
 
+// Specifies off-axis stereo frustums (tangent values) for left/right eyes.
+struct g3StereoFrustum {
+  float left;
+  float right;
+  float top;
+  float bottom;
+};
+void g3_SetStereoFrustum(const g3StereoFrustum *left, const g3StereoFrustum *right);
+
 // end the frame
 void g3_EndFrame(void);
 

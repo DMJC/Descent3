@@ -2438,7 +2438,7 @@ extern void DrawRoomVisPnts(object *obj);
 #endif
 
 void GameRenderWorld(object *viewer, vector *viewer_eye, int viewer_roomnum, matrix *viewer_orient, float zoom,
-                     bool rear_view) {
+                     bool rear_view, bool stereo, bool is_left_eye, float eye_separation, float convergence_distance) {
   matrix temp_orient, save_orient;
 
   // Get the viewer orientation
@@ -2452,7 +2452,11 @@ void GameRenderWorld(object *viewer, vector *viewer_eye, int viewer_roomnum, mat
   }
 
   // Start the 3D
-  g3_StartFrame(viewer_eye, viewer_orient, zoom);
+  if (stereo) {
+    g3_StartFrameStereo(viewer_eye, viewer_orient, zoom, is_left_eye, eye_separation, convergence_distance);
+  } else {
+    g3_StartFrame(viewer_eye, viewer_orient, zoom);
+  }
 
   // Reset fog,zbuffer
   Num_fogged_rooms_this_frame = 0;
@@ -2517,19 +2521,21 @@ void GameDrawMainView() {
     }
 
     const float eye_offset = VR_GetStereoEyeSeparation() * 0.5f;
-    auto render_eye = [&](float eye_sign) {
+    constexpr float kVrConvergenceDistance = 30.0f;
+    auto render_eye = [&](float eye_sign, bool is_left_eye) {
       vector eye_pos = Viewer_object->pos + (view_orient.rvec * (eye_sign * eye_offset));
       StartFrame(false);
       rend_ClearScreen(GR_BLACK);
-      GameRenderWorld(Viewer_object, &eye_pos, Viewer_object->roomnum, &view_orient, Render_zoom, false);
+      GameRenderWorld(Viewer_object, &eye_pos, Viewer_object->roomnum, &view_orient, Render_zoom, false, true,
+                      is_left_eye, VR_GetStereoEyeSeparation(), kVrConvergenceDistance);
       DoMatcensRenderFrame();
       ProcessRenderEvents();
       EndFrame();
       return rend_Screenshot();
     };
 
-    auto left = render_eye(-1.0f);
-    auto right = render_eye(1.0f);
+    auto left = render_eye(-1.0f, true);
+    auto right = render_eye(1.0f, false);
     if (restore_viewer) {
       Viewer_object->orient = saved_orient;
     }

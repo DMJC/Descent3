@@ -24,12 +24,25 @@
 
 // User-specified aspect ratio, stored as w/h
 static float sAspect = 0.0f;
+static g3StereoFrustum sStereoFrustum[2];
+static bool sStereoFrustumValid = false;
 
 // allows the user to specify an aspect ratio that overrides the renderer's
 // The parameter is the w/h of the screen pixels
 void g3_SetAspectRatio(float aspect) { sAspect = aspect; }
 // returns the user-specified aspect ratio used to override the renderer's
 float g3_GetAspectRatio() { return sAspect; }
+
+void g3_SetStereoFrustum(const g3StereoFrustum *left, const g3StereoFrustum *right) {
+  if (!left || !right) {
+    sStereoFrustumValid = false;
+    return;
+  }
+
+  sStereoFrustum[0] = *left;
+  sStereoFrustum[1] = *right;
+  sStereoFrustumValid = true;
+}
 
 void g3_GetViewPortMatrix(float *viewMat) {
   // extract the viewport data from the renderer
@@ -133,6 +146,29 @@ void g3_StartFrame(vector *view_pos, matrix *view_matrix, float zoom) {
 
 // Add this new function
 void g3_GetStereoProjectionMatrix(float zoom, bool is_left_eye, float eye_separation, float convergence_distance, float *projMat) {
+  if (sStereoFrustumValid) {
+    const g3StereoFrustum &frustum = sStereoFrustum[is_left_eye ? 0 : 1];
+
+    // setup the matrix
+    memset(projMat, 0, sizeof(float) * 16);
+
+    const float width = frustum.right - frustum.left;
+    const float height = frustum.top - frustum.bottom;
+    if (width == 0.0f || height == 0.0f) {
+      sStereoFrustumValid = false;
+    } else {
+      projMat[0] = 2.0f / width;
+      projMat[5] = 2.0f / height;
+      projMat[8] = (frustum.right + frustum.left) / width;
+      projMat[9] = (frustum.top + frustum.bottom) / height;
+      projMat[10] = 1.0f;
+      projMat[11] = 1.0f;
+      projMat[14] = -1.0f;
+      return;
+    }
+
+  }
+
   // get window size
   int viewportWidth, viewportHeight;
   rend_GetProjectionParameters(&viewportWidth, &viewportHeight);
@@ -148,11 +184,11 @@ void g3_GetStereoProjectionMatrix(float zoom, bool is_left_eye, float eye_separa
 
   // Calculate the eye offset for this eye
   float eye_offset = is_left_eye ? -eye_separation / 2.0f : eye_separation / 2.0f;
-  
-  // Calculate frustum shift based on convergence distance
-  // This assumes near plane is at distance 1.0 (adjust if different)
-  float near_plane = 1.0f; // You may need to adjust this
-  float frustum_shift = -eye_offset * (near_plane / convergence_distance);
+  float frustum_shift = 0.0f;
+  if (convergence_distance > 0.0f && eye_separation != 0.0f) {
+    // Shift the frustum opposite of the eye offset so the convergence plane remains centered.
+    frustum_shift = -eye_offset / convergence_distance;
+  }
   
   // Apply the asymmetric frustum offset
   if (s <= 1.0f) {
