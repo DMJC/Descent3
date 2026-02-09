@@ -1418,6 +1418,10 @@ void LoadLevelProgress(int step, float percent, const char *chunk) {
     }
     return;
   }
+  const bool vr_menu_mode = VR_IsEnabled();
+  if (vr_menu_mode) {
+    VR_BeginMenuFramebufferRender();
+  }
   StartFrame(0, 0, Max_window_w, Max_window_h);
   // do background.
   if (!level_bmp_loaded) {
@@ -1580,8 +1584,11 @@ void LoadLevelProgress(int step, float percent, const char *chunk) {
   }
   grtext_Flush();
   EndFrame();
+  if (vr_menu_mode) {
+    VR_EndMenuFramebufferRender();
+  }
   rend_Flip();
-  if (VR_IsEnabled()) {
+  if (vr_menu_mode) {
     VR_RenderMenuFrame();
   }
 }
@@ -1608,6 +1615,10 @@ void ShowProgressScreen(const char *str, const char *str2, bool flip) {
       PrintDedicatedMessage("%s\n", str2);
     return;
   }
+  const bool vr_menu_mode = VR_IsEnabled();
+  if (vr_menu_mode) {
+    VR_BeginMenuFramebufferRender();
+  }
   StartFrame(0, 0, Max_window_w, Max_window_h);
   rend_ClearScreen(GR_BLACK);
   grtext_SetFont(MENU_FONT);
@@ -1618,9 +1629,12 @@ void ShowProgressScreen(const char *str, const char *str2, bool flip) {
     grtext_CenteredPrintf(0, (Max_window_h / 2) + (text_height * 2), str2);
   grtext_Flush();
   EndFrame();
+  if (vr_menu_mode) {
+    VR_EndMenuFramebufferRender();
+  }
   if (flip)
     rend_Flip();
-  if (VR_IsEnabled()) {
+  if (vr_menu_mode) {
     VR_RenderMenuFrame();
   }
 }

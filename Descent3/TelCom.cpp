@@ -1505,6 +1505,10 @@ void TelcomRenderScreen(bool poweron, bool powerup, uint8_t power_effect) {
     frametime = 0;
   }
 
+  const bool vr_menu_mode = VR_IsEnabled();
+  if (vr_menu_mode) {
+    VR_BeginMenuFramebufferRender();
+  }
   StartFrame(0, 0, Game_window_w, Game_window_h);
 
   if (Telcom_show_glitch) {
@@ -1542,9 +1546,12 @@ void TelcomRenderScreen(bool poweron, bool powerup, uint8_t power_effect) {
   TelcomRenderMouse();
 
   EndFrame();
+  if (vr_menu_mode) {
+    VR_EndMenuFramebufferRender();
+  }
   rend_Flip();
 
-  if (VR_IsEnabled() && Telcom_system.current_status == TS_MISSION) {
+  if (vr_menu_mode) {
     VR_RenderMenuFrame();
   }
 
