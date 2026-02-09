@@ -2489,6 +2489,9 @@ void GameRenderWorld(object *viewer, vector *viewer_eye, int viewer_roomnum, mat
     viewer->orient = save_orient;
 }
 
+// Added by Samir
+#define HUD_RENDER_ZOOM 0.56f
+
 // Render into the big window
 void GameDrawMainView() {
   extern bool Guided_missile_smallview; // smallviews.cpp
@@ -2530,6 +2533,13 @@ void GameDrawMainView() {
                       is_left_eye, VR_GetStereoEyeSeparation(), kVrConvergenceDistance);
       DoMatcensRenderFrame();
       ProcessRenderEvents();
+      if (!HUD_disabled) {
+        g3_StartFrameStereo(&eye_pos, &view_orient, HUD_RENDER_ZOOM, is_left_eye, VR_GetStereoEyeSeparation(),
+                            kVrConvergenceDistance);
+        RenderHUDFrame();
+        RenderAuxHUDFrame();
+        g3_EndFrame();
+      }
       EndFrame();
       return rend_Screenshot();
     };
@@ -2560,9 +2570,6 @@ void GameDrawMainView() {
     Viewer_object = save_view;
 
 }
-
-// Added by Samir
-#define HUD_RENDER_ZOOM 0.56f
 
 // Do Cockpit/Hud
 void GameDrawHud() {
