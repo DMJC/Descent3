@@ -516,8 +516,8 @@ void VR_InitFromCommandLine() {
     Vr_system->GetProjectionRaw(vr::Eye_Left, &left_l, &left_r, &left_t, &left_b);
     Vr_system->GetProjectionRaw(vr::Eye_Right, &right_l, &right_r, &right_t, &right_b);
 
-    g3StereoFrustum left_frustum{left_l, left_r, left_t, left_b};
-    g3StereoFrustum right_frustum{right_l, right_r, right_t, right_b};
+    g3StereoFrustum left_frustum{left_l, left_r, -left_t, -left_b};
+    g3StereoFrustum right_frustum{right_l, right_r, -right_t, -right_b};
     g3_SetStereoFrustum(&right_frustum, &left_frustum);
   }
 
