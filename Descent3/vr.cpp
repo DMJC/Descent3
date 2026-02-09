@@ -409,8 +409,8 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
 
   // Set up 3D view with eye offset for stereo
 //  vector view_pos = eye_offset;
- const vector menu_center_offset{22.0f, -10.0f, 0.0f};
-  vector view_pos = eye_offset + menu_center_offset;
+ const vector menu_center_offset{22.0f, -11.0f, 0.0f};
+  vector view_pos = /*eye_offset + */menu_center_offset;
   matrix view_orient = Identity_matrix;
   //g3_StartFrame(&view_pos, &view_orient, D3_DEFAULT_ZOOM);
   constexpr float kMenuZoom = D3_DEFAULT_ZOOM * 1.35f;
