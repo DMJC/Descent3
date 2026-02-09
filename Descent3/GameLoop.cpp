@@ -2537,10 +2537,6 @@ void GameDrawMainView() {
         g3_StartFrameStereo(&eye_pos, &view_orient, HUD_RENDER_ZOOM, is_left_eye, VR_GetStereoEyeSeparation(),
                             kVrConvergenceDistance);
         RenderHUDFrame();
-        g3_EndFrame();
-
-        g3_StartFrameStereo(&eye_pos, &view_orient, HUD_RENDER_ZOOM, is_left_eye, VR_GetStereoEyeSeparation(),
-                            kVrConvergenceDistance);
         RenderAuxHUDFrame();
         g3_EndFrame();
       }
