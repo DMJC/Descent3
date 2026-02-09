@@ -408,7 +408,6 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   if (Vr_menu_fbo_texture == 0) {
     return;
   }
-  (void)eye_offset;
 
   // Render to window at VR submit resolution
   StartFrame(0, 0, Vr_submit_width, Vr_submit_height);
@@ -418,7 +417,7 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
 //  vector view_pos = eye_offset;
 // const vector menu_center_offset{22.0f, -11.0f, 0.0f};
 const vector menu_center_offset{0.5f, -3.5f, 16.0f};
-  vector view_pos = /*eye_offset + */menu_center_offset;
+  vector view_pos = eye_offset + menu_center_offset;
   // Set up 3D view centered between both eyes (monoscopic menu surface).
 //  vector view_pos{0.0f, 0.0f, 0.0f};
   matrix view_orient = Identity_matrix;
@@ -566,25 +565,13 @@ void VR_RenderMenuFrame() {
   
   // Step 1: Render the curved cinema screen with the menu FBO texture for each eye
   if (Vr_render_mode == VrRenderMode::Stereo) {
-    // Stereo mode: render with eye separation
-/*    const float half_separation = Vr_eye_separation * 0.5f;
+    // Stereo mode: render with eye separation.
+    const float half_separation = Vr_eye_separation * 0.5f;
     vector left_eye_offset{-half_separation, 0.0f, 0.0f};
     vector right_eye_offset{half_separation, 0.0f, 0.0f};
-    
+
     VR_RenderCinemaScreenForEye(Vr_submit_left, left_eye_offset);
-    VR_RenderCinemaScreenForEye(Vr_submit_right, right_eye_offset);*/
-    // Stereo mode: render menu without eye separation to avoid doubled menu depth.
-    vector no_offset{0.0f, 0.0f, 0.0f};
-    VR_RenderCinemaScreenForEye(Vr_submit_left, no_offset);
-    if (Vr_submit_left.texture != 0 && VR_EnsureSubmitSurface(Vr_submit_right)) {
-      Vr_submit_right.buffer = Vr_submit_left.buffer;
-      auto &gl = VR_GetGlFns();
-      if (gl.bind_texture && gl.tex_sub_image_2d) {
-        gl.bind_texture(GL_TEXTURE_2D, Vr_submit_right.texture);
-        gl.tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, Vr_submit_width, Vr_submit_height, GL_RGBA, GL_UNSIGNED_BYTE,
-                           Vr_submit_right.buffer.data());
-      }
-    }
+    VR_RenderCinemaScreenForEye(Vr_submit_right, right_eye_offset);
   } else {
     // Cinema mode: both eyes see the same thing
     vector no_offset{0.0f, 0.0f, 0.0f};
