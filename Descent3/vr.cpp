@@ -61,6 +61,8 @@ bool Vr_menu_texture_registered = false;
 void VR_DeleteSubmitSurface(VrSubmitSurface &surface);
 
 constexpr float kPi = 3.14159265358979323846f;
+constexpr uint32_t kVrTargetWidth = 2000;
+constexpr uint32_t kVrTargetHeight = 2040;
 
 struct VrGlFns {
   bool loaded = false;
@@ -122,8 +124,10 @@ int VR_NextPowerOfTwo(int value) {
 }
 
 void VR_EnsureMenuBitmap() {
-  const int desired_width = Max_window_w;
-  const int desired_height = Max_window_h;
+//  const int desired_width = Max_window_w;
+//  const int desired_height = Max_window_h;
+  const int desired_width = std::max<int>(Max_window_w, kVrTargetWidth);
+  const int desired_height = std::max<int>(Max_window_h, kVrTargetHeight);
   const int desired_texture_size = VR_NextPowerOfTwo(std::max(desired_width, desired_height));
 
   if (Vr_menu_width == desired_width && Vr_menu_height == desired_height && Vr_menu_texture_size == desired_texture_size &&
@@ -236,12 +240,14 @@ void VR_EnsureSubmitTexture() {
     return;
   }
 
-  uint32_t target_w = 0;
+/*  uint32_t target_w = 0;
   uint32_t target_h = 0;
   Vr_system->GetRecommendedRenderTargetSize(&target_w, &target_h);
   if (target_w == 0 || target_h == 0) {
     return;
-  }
+  }*/
+  uint32_t target_w = kVrTargetWidth;
+  uint32_t target_h = kVrTargetHeight;
 
   if (Vr_submit_width == target_w && Vr_submit_height == target_h) {
     return;
@@ -402,6 +408,7 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   if (Vr_menu_fbo_texture == 0) {
     return;
   }
+  (void)eye_offset;
 
   // Render to window at VR submit resolution
   StartFrame(0, 0, Vr_submit_width, Vr_submit_height);
@@ -409,8 +416,11 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
 
   // Set up 3D view with eye offset for stereo
 //  vector view_pos = eye_offset;
- const vector menu_center_offset{22.0f, -11.0f, 0.0f};
+// const vector menu_center_offset{22.0f, -11.0f, 0.0f};
+const vector menu_center_offset{0.5f, -3.5f, 16.0f};
   vector view_pos = /*eye_offset + */menu_center_offset;
+  // Set up 3D view centered between both eyes (monoscopic menu surface).
+//  vector view_pos{0.0f, 0.0f, 0.0f};
   matrix view_orient = Identity_matrix;
   //g3_StartFrame(&view_pos, &view_orient, D3_DEFAULT_ZOOM);
   constexpr float kMenuZoom = D3_DEFAULT_ZOOM * 1.35f;
@@ -427,7 +437,7 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   // Draw the curved cinema screen with menu texture
 //  constexpr float kArcDegrees = 100.0f;
 //  constexpr float kRadius = 8.0f;
-  constexpr float kArcDegrees = 20.0f;
+  constexpr float kArcDegrees = 10.0f;
   constexpr float kRadius = 20.0f;
   const float aspect_ratio =
       (Vr_submit_height > 0) ? static_cast<float>(Vr_submit_width) / static_cast<float>(Vr_submit_height) : 1.0f;
@@ -505,9 +515,11 @@ void VR_InitFromCommandLine() {
   }
 
   if (Vr_openvr_ready) {
-    uint32_t target_w = 0;
+/*    uint32_t target_w = 0;
     uint32_t target_h = 0;
-    Vr_system->GetRecommendedRenderTargetSize(&target_w, &target_h);
+    Vr_system->GetRecommendedRenderTargetSize(&target_w, &target_h);*/
+    uint32_t target_w = kVrTargetWidth;
+    uint32_t target_h = kVrTargetHeight;
     const char *mode_label = (Vr_render_mode == VrRenderMode::Stereo) ? "stereo" : "cinema";
     LOG_INFO.printf("OpenVR enabled via -vr (%s). Recommended render target %ux%u.", mode_label, target_w, target_h);
   }
