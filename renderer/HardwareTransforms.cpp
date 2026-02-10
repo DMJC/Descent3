@@ -19,6 +19,7 @@
 #include <cstring>
 
 #include "3d.h"
+#include "log.h"
 #include "HardwareInternal.h"
 #include "renderer.h"
 
@@ -77,6 +78,10 @@ void g3_UpdateFullTransform() {
 
   // projection  -> ViewPort
   g3_TransformMult(gTransformFull, gTransformFull, gTransformViewPort);
+
+  LOG_INFO.printf("VR-MENU-TRACE: g3_UpdateFullTransform proj00=%f proj11=%f proj20=%f proj21=%f viewport00=%f viewport11=%f",
+                  gTransformProjection[0][0], gTransformProjection[1][1], gTransformProjection[2][0],
+                  gTransformProjection[2][1], gTransformViewPort[0][0], gTransformViewPort[1][1]);
 }
 
 void g3_ForceTransformRefresh(void) { sUseTransformPassthru = -1; }
@@ -88,6 +93,7 @@ void g3_RefreshTransforms(bool usePassthru) {
   }
 
   if (usePassthru) {
+    LOG_INFO << "VR-MENU-TRACE: g3_RefreshTransforms stage=passthru";
     // setup OpenGL to use pass-thru
     rend_TransformSetToPassthru();
   } else {
@@ -95,6 +101,8 @@ void g3_RefreshTransforms(bool usePassthru) {
     int viewportWidth, viewportHeight, viewportX, viewportY;
     rend_GetProjectionScreenParameters(viewportX, viewportY, viewportWidth, viewportHeight);
 
+    LOG_INFO.printf("VR-MENU-TRACE: g3_RefreshTransforms stage=full viewport x=%d y=%d w=%d h=%d", viewportX,
+                    viewportY, viewportWidth, viewportHeight);
     // setup OpenGL to use full transform stack
     // TODO: in the future we only need to set those that have changed
     rend_TransformSetViewport(viewportX, viewportY, viewportWidth, viewportHeight);

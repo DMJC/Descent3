@@ -17,6 +17,7 @@
 */
 
 #include <cstring>
+#include <cmath>
 
 #include "3d.h"
 #include "log.h"
@@ -28,6 +29,10 @@ static float sAspect = 0.0f;
 static g3StereoFrustum sStereoFrustum[2];
 bool sStereoFrustumValid = false;
 
+// Forward declaration for stereo projection path used by g3_StartFrame.
+void g3_GetStereoProjectionMatrix(float zoom, bool is_left_eye, float eye_separation, float convergence_distance,
+                                  float *projMat);
+
 // allows the user to specify an aspect ratio that overrides the renderer's
 // The parameter is the w/h of the screen pixels
 void g3_SetAspectRatio(float aspect) { sAspect = aspect; }
@@ -36,13 +41,18 @@ float g3_GetAspectRatio() { return sAspect; }
 
 void g3_SetStereoFrustum(const g3StereoFrustum *left, const g3StereoFrustum *right) {
   if (!left || !right) {
-    sStereoFrustumValid = false;
+    // Keep the last valid stereo frustums instead of dropping back to mono
+    // projection mid-frame if a transient null input occurs.
+    LOG_INFO << "VR-MENU-TRACE: g3_SetStereoFrustum invalid input (preserving previous stereo frustums)";
     return;
   }
 
   sStereoFrustum[0] = *left;
   sStereoFrustum[1] = *right;
   sStereoFrustumValid = true;
+
+  LOG_INFO.printf("VR-MENU-TRACE: g3_SetStereoFrustum L(l=%f r=%f t=%f b=%f) R(l=%f r=%f t=%f b=%f)", left->left,
+                  left->right, left->top, left->bottom, right->left, right->right, right->top, right->bottom);
 }
 
 void g3_GetViewPortMatrix(float *viewMat) {
@@ -50,6 +60,8 @@ void g3_GetViewPortMatrix(float *viewMat) {
   int viewportWidth, viewportHeight;
   int viewportX, viewportY;
   rend_GetProjectionScreenParameters(viewportX, viewportY, viewportWidth, viewportHeight);
+  LOG_INFO.printf("VR-MENU-TRACE: g3_GetViewPortMatrix viewport x=%d y=%d w=%d h=%d", viewportX, viewportY,
+                  viewportWidth, viewportHeight);
 
   float viewportWidthOverTwo = ((float)viewportWidth) * 0.5f;
   float viewportHeightOverTwo = ((float)viewportHeight) * 0.5f;
@@ -94,13 +106,45 @@ void g3_GetProjectionMatrix(float zoom, float *projMat) {
   projMat[10] = 1.0f;
   projMat[11] = 1.0f;
   projMat[14] = -1.0f;
+
+  LOG_INFO.printf("VR-MENU-TRACE: g3_GetProjectionMatrix zoom=%f viewport_w=%d viewport_h=%d proj00=%f proj11=%f", zoom,
+                  viewportWidth, viewportHeight, projMat[0], projMat[5]);
 }
 
 // start the frame
 void g3_StartFrame(vector *view_pos, matrix *view_matrix, float zoom) {
   // initialize the viewport transform
+  LOG_INFO.printf("VR-MENU-TRACE: g3_StartFrame zoom=%f view_pos=(%f,%f,%f)", zoom, view_pos->x(), view_pos->y(),
+                  view_pos->z());
   g3_GetViewPortMatrix((float *)gTransformViewPort);
-  g3_GetProjectionMatrix(zoom, (float *)gTransformProjection);
+  if (sStereoFrustumValid) {
+    const float left_center = (sStereoFrustum[0].left + sStereoFrustum[0].right) * 0.5f;
+    const float right_center = (sStereoFrustum[1].left + sStereoFrustum[1].right) * 0.5f;
+
+    // Choose the stereo frustum that best matches the current eye position so
+    // g3_StartFrame does not silently fall back to mono projection while
+    // stereo frustums are active.
+    bool use_left_slot = true;
+    if (fabsf(left_center - right_center) > 0.00001f) {
+      if (view_pos->x() < 0.0f) {
+        use_left_slot = left_center < right_center;
+      } else if (view_pos->x() > 0.0f) {
+        use_left_slot = left_center > right_center;
+      } else {
+        use_left_slot = fabsf(left_center) <= fabsf(right_center);
+      }
+    }
+
+    LOG_INFO.printf(
+        "VR-MENU-TRACE: g3_StartFrame stereo-frustum-active eye_pos_x=%f L(l=%f r=%f c=%f) R(l=%f r=%f c=%f) choose=%s",
+        view_pos->x(), sStereoFrustum[0].left, sStereoFrustum[0].right, left_center, sStereoFrustum[1].left,
+        sStereoFrustum[1].right, right_center, use_left_slot ? "LEFT_SLOT" : "RIGHT_SLOT");
+
+    g3_GetStereoProjectionMatrix(zoom, use_left_slot, 0.0f, 0.0f, (float *)gTransformProjection);
+  } else {
+    LOG_INFO << "VR-MENU-TRACE: g3_StartFrame stereo frustum invalid -> mono projection";
+    g3_GetProjectionMatrix(zoom, (float *)gTransformProjection);
+  }
   g3_GetModelViewMatrix(view_pos, view_matrix, (float *)gTransformModelView);
   g3_UpdateFullTransform();
 
@@ -110,6 +154,8 @@ void g3_StartFrame(vector *view_pos, matrix *view_matrix, float zoom) {
   // Set vars for projection
   Window_w2 = ((scalar)Window_width) * 0.5f;
   Window_h2 = ((scalar)Window_height) * 0.5f;
+  LOG_INFO.printf("VR-MENU-TRACE: g3_StartFrame projection window_w=%d window_h=%d window_w2=%f window_h2=%f", Window_width,
+                  Window_height, Window_w2, Window_h2);
 
   // ISB trick: use the window aspect only, screen aspect ratio
   // is not important because we assume pixels are square
@@ -149,22 +195,51 @@ void g3_StartFrame(vector *view_pos, matrix *view_matrix, float zoom) {
 void g3_GetStereoProjectionMatrix(float zoom, bool is_left_eye, float eye_separation, float convergence_distance, float *projMat) {
   if (sStereoFrustumValid) {
     const g3StereoFrustum &frustum = sStereoFrustum[is_left_eye ? 0 : 1];
+    const g3StereoFrustum &left_eye_frustum = sStereoFrustum[0];
+    const g3StereoFrustum &right_eye_frustum = sStereoFrustum[1];
 
     memset(projMat, 0, sizeof(float) * 16);
 
-    const float width = frustum.right - frustum.left;
-    const float height = frustum.top - frustum.bottom;
+    // Normalize incoming bounds so projection math is stable, then use a
+    // shared width/height large enough for both eyes to avoid one eye being
+    // horizontally cropped/stretched when eye frusta differ.
+    const float left = (frustum.left < frustum.right) ? frustum.left : frustum.right;
+    const float right = (frustum.left < frustum.right) ? frustum.right : frustum.left;
+    const float bottom = (frustum.bottom < frustum.top) ? frustum.bottom : frustum.top;
+    const float top = (frustum.bottom < frustum.top) ? frustum.top : frustum.bottom;
+
+    const float left_eye_width = (left_eye_frustum.left < left_eye_frustum.right)
+                                     ? (left_eye_frustum.right - left_eye_frustum.left)
+                                     : (left_eye_frustum.left - left_eye_frustum.right);
+    const float right_eye_width = (right_eye_frustum.left < right_eye_frustum.right)
+                                      ? (right_eye_frustum.right - right_eye_frustum.left)
+                                      : (right_eye_frustum.left - right_eye_frustum.right);
+    const float left_eye_height = (left_eye_frustum.bottom < left_eye_frustum.top)
+                                      ? (left_eye_frustum.top - left_eye_frustum.bottom)
+                                      : (left_eye_frustum.bottom - left_eye_frustum.top);
+    const float right_eye_height = (right_eye_frustum.bottom < right_eye_frustum.top)
+                                       ? (right_eye_frustum.top - right_eye_frustum.bottom)
+                                       : (right_eye_frustum.bottom - right_eye_frustum.top);
+
+    const float width = (left_eye_width > right_eye_width) ? left_eye_width : right_eye_width;
+    const float height = (left_eye_height > right_eye_height) ? left_eye_height : right_eye_height;
+
+    LOG_INFO.printf("VR-MENU-TRACE: g3_GetStereoProjectionMatrix eye=%s frustum(l=%f r=%f t=%f b=%f) shared_w=%f shared_h=%f",
+                    is_left_eye ? "LEFT" : "RIGHT", left, right, top, bottom, width, height);
+
     if (width == 0.0f || height == 0.0f) {
+      LOG_INFO << "VR-MENU-TRACE: g3_GetStereoProjectionMatrix falling back to default projection";
       // Don't invalidate globally, just fall through to default projection
-      // sStereoFrustumValid = false;  // REMOVE THIS LINE
     } else {
       projMat[0] = 2.0f / width;
       projMat[5] = 2.0f / height;
-      projMat[8] = (frustum.right + frustum.left) / width;
-      projMat[9] = (frustum.top + frustum.bottom) / height;
+      projMat[8] = (right + left) / width;
+      projMat[9] = (top + bottom) / height;
       projMat[10] = 1.0f;
       projMat[11] = 1.0f;
       projMat[14] = -1.0f;
+      LOG_INFO.printf("VR-MENU-TRACE: g3_GetStereoProjectionMatrix eye=%s proj00=%f proj11=%f proj20=%f proj21=%f",
+                      is_left_eye ? "LEFT" : "RIGHT", projMat[0], projMat[5], projMat[8], projMat[9]);
       return;
     }
   }
@@ -213,12 +288,13 @@ void g3_StartFrameStereo(vector *view_pos, matrix *view_matrix, float zoom, bool
   g3_GetViewPortMatrix((float *)gTransformViewPort);
   
   // USE STEREO PROJECTION instead of regular
+  LOG_INFO.printf("VR-MENU-TRACE: g3_StartFrameStereo eye=%s zoom=%f eye_sep=%f conv=%f", is_left_eye ? "LEFT" : "RIGHT",
+                  zoom, eye_separation, convergence_distance);
   g3_GetStereoProjectionMatrix(zoom, is_left_eye, eye_separation, convergence_distance, (float *)gTransformProjection);
 
-  LOG_INFO.printf("VR: Eye %s - projMat[0][0]=%f projMat[2][0]=%f sStereoValid=%d",
-          is_left_eye ? "LEFT" : "RIGHT",
-          gTransformProjection[0][0], gTransformProjection[2][0], 
-          sStereoFrustumValid ? 1 : 0);
+  LOG_INFO.printf("VR-MENU-TRACE: g3_StartFrameStereo eye=%s proj00=%f proj11=%f proj20=%f proj21=%f stereoValid=%d",
+                  is_left_eye ? "LEFT" : "RIGHT", gTransformProjection[0][0], gTransformProjection[1][1],
+                  gTransformProjection[2][0], gTransformProjection[2][1], sStereoFrustumValid ? 1 : 0);
   
   g3_GetModelViewMatrix(view_pos, view_matrix, (float *)gTransformModelView);
   g3_UpdateFullTransform();

@@ -494,7 +494,7 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   float v_max = Vr_menu_texture_registered ? 1.0f : 
                 static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
   
-  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, 120.0f, 5.0f, 3.0f);
+  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, 80.0f, 5.0f, 3.0f);
 
   g3_EndFrame();
   EndFrame();

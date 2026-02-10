@@ -1213,6 +1213,8 @@ void StartFrame(int x, int y, int x2, int y2, bool clear, bool push_on_stack) {
     FramePush(x, y, x2, y2, clear);
   }
 
+  LOG_INFO.printf("VR-MENU-TRACE: StartFrame x=%d y=%d x2=%d y2=%d w=%d h=%d clear=%d mode=%d vr=%d", x, y, x2, y2,
+                  x2 - x, y2 - y, clear ? 1 : 0, GetFunctionMode(), VR_IsEnabled() ? 1 : 0);
   rend_StartFrame(x, y, x2, y2);
 
   grtext_SetParameters(0, 0, (x2 - x), (y2 - y));
