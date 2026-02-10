@@ -305,10 +305,12 @@
 #include "d3music.h"
 #include "gameloop.h"
 #include "args.h"
+#include "openvr.h"
 
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <limits>
 #include <vector>
 #include <set>
 
@@ -346,6 +348,27 @@ float Render_FOV_setting = 72.0f;
 bool Game_fullscreen = true;
 int Display_id = 0;
 
+namespace {
+bool GetOpenVrRecommendedRenderTargetSize(uint32_t &width, uint32_t &height) {
+  width = 0;
+  height = 0;
+
+  if (!vr::VR_IsHmdPresent()) {
+    return false;
+  }
+
+  vr::EVRInitError error = vr::VRInitError_None;
+  vr::IVRSystem *vr_system = vr::VR_Init(&error, vr::VRApplication_Background);
+  if (error != vr::VRInitError_None || !vr_system) {
+    return false;
+  }
+
+  vr_system->GetRecommendedRenderTargetSize(&width, &height);
+  vr::VR_Shutdown();
+  return width > 0 && height > 0;
+}
+} // namespace
+
 void ConfigureDisplayResolutions() {
   int display_count = 0;
   SDL_DisplayID *displays = SDL_GetDisplays(&display_count);
@@ -354,6 +377,23 @@ void ConfigureDisplayResolutions() {
   }
 
   std::set<tVideoResolution, tVideoResolution::tVideoResolutionCompare> resolutions;
+
+  uint32_t vr_target_width = 0;
+  uint32_t vr_target_height = 0;
+  if (GetOpenVrRecommendedRenderTargetSize(vr_target_width, vr_target_height)) {
+    if (vr_target_width <= std::numeric_limits<uint16_t>::max() && vr_target_height <= std::numeric_limits<uint16_t>::max()) {
+      // Per-eye resolution from the HMD runtime.
+      resolutions.emplace(tVideoResolution{static_cast<uint16_t>(vr_target_width), static_cast<uint16_t>(vr_target_height)});
+      // Side-by-side stereo target often used by the renderer and texture submission paths.
+      if (vr_target_width <= (std::numeric_limits<uint16_t>::max() / 2)) {
+        resolutions.emplace(
+            tVideoResolution{static_cast<uint16_t>(vr_target_width * 2), static_cast<uint16_t>(vr_target_height)});
+      }
+
+      LOG_INFO.printf("Detected OpenVR recommended resolution %ux%u (added per-eye and side-by-side modes)",
+                      vr_target_width, vr_target_height);
+    }
+  }
   for (int d = 0; d < display_count; d++) {
     SDL_DisplayID display_id = displays[d];
 
