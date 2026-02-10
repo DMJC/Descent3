@@ -149,18 +149,34 @@ void g3_StartFrame(vector *view_pos, matrix *view_matrix, float zoom) {
 void g3_GetStereoProjectionMatrix(float zoom, bool is_left_eye, float eye_separation, float convergence_distance, float *projMat) {
   if (sStereoFrustumValid) {
     const g3StereoFrustum &frustum = sStereoFrustum[is_left_eye ? 0 : 1];
+    const g3StereoFrustum &left_eye_frustum = sStereoFrustum[0];
+    const g3StereoFrustum &right_eye_frustum = sStereoFrustum[1];
 
     memset(projMat, 0, sizeof(float) * 16);
 
-    // Normalize incoming bounds so projection scale is always computed from
-    // a positive eye-specific width/height.
+    // Normalize incoming bounds so projection math is stable, then use a
+    // shared width/height large enough for both eyes to avoid one eye being
+    // horizontally cropped/stretched when eye frusta differ.
     const float left = (frustum.left < frustum.right) ? frustum.left : frustum.right;
     const float right = (frustum.left < frustum.right) ? frustum.right : frustum.left;
     const float bottom = (frustum.bottom < frustum.top) ? frustum.bottom : frustum.top;
     const float top = (frustum.bottom < frustum.top) ? frustum.top : frustum.bottom;
 
-    const float width = right - left;
-    const float height = top - bottom;
+    const float left_eye_width = (left_eye_frustum.left < left_eye_frustum.right)
+                                     ? (left_eye_frustum.right - left_eye_frustum.left)
+                                     : (left_eye_frustum.left - left_eye_frustum.right);
+    const float right_eye_width = (right_eye_frustum.left < right_eye_frustum.right)
+                                      ? (right_eye_frustum.right - right_eye_frustum.left)
+                                      : (right_eye_frustum.left - right_eye_frustum.right);
+    const float left_eye_height = (left_eye_frustum.bottom < left_eye_frustum.top)
+                                      ? (left_eye_frustum.top - left_eye_frustum.bottom)
+                                      : (left_eye_frustum.bottom - left_eye_frustum.top);
+    const float right_eye_height = (right_eye_frustum.bottom < right_eye_frustum.top)
+                                       ? (right_eye_frustum.top - right_eye_frustum.bottom)
+                                       : (right_eye_frustum.bottom - right_eye_frustum.top);
+
+    const float width = (left_eye_width > right_eye_width) ? left_eye_width : right_eye_width;
+    const float height = (left_eye_height > right_eye_height) ? left_eye_height : right_eye_height;
 
     if (width == 0.0f || height == 0.0f) {
       // Don't invalidate globally, just fall through to default projection
