@@ -637,38 +637,35 @@ void VR_RenderMenuFrame() {
 
   // The menu has already been rendered to Vr_menu_fbo_texture
   
-  // Render a single curved cinema screen texture shared by both eyes.
-  // Compute convergence-center X and apply the same translation for both eyes.
-  float menu_horizontal_offset = 0.0f;
+  // Render curved cinema screens per-eye by translating curve X geometry.
+  float left_menu_offset = 0.0f;
+  float right_menu_offset = 0.0f;
   if (Vr_system) {
     const vector left_eye_offset = VR_GetOpenVREyeOffset(vr::Eye_Left, true);
     const vector right_eye_offset = VR_GetOpenVREyeOffset(vr::Eye_Right, false);
-    menu_horizontal_offset = -0.5f * (left_eye_offset.x() + right_eye_offset.x());
+    const float convergence_center_x = -0.5f * (left_eye_offset.x() + right_eye_offset.x());
+    const float per_eye_curve_shift = 0.5f * std::fabs(right_eye_offset.x() - left_eye_offset.x());
+
+    // Left eye curve shifts right, right eye curve shifts left.
+    left_menu_offset = convergence_center_x + per_eye_curve_shift;
+    right_menu_offset = convergence_center_x - per_eye_curve_shift;
   }
 
-  VR_RenderCinemaScreenForEye(Vr_submit_left, menu_horizontal_offset);
+  VR_RenderCinemaScreenForEye(Vr_submit_left, left_menu_offset);
+  VR_RenderCinemaScreenForEye(Vr_submit_right, right_menu_offset);
 
   // Blit the menu texture to the monitor window
   VR_BlitMenuTextureToWindow();
 
-  // Submit the same shared menu texture to both eyes, with a small opposite
-  // horizontal eye shift so left-eye appears right and right-eye appears left.
+  // Submit per-eye rendered menu textures.
   if (Vr_openvr_ready && vr::VRCompositor()) {
-    if (Vr_submit_left.texture != 0) {
-      vr::Texture_t shared_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
-                                      vr::TextureType_OpenGL, vr::ColorSpace_Auto};
-
-      // Positive value shifts the perceived image right in the left eye and
-      // left in the right eye. Tune this if you want stronger/weaker parallax.
-      constexpr float kVrMenuEyeShiftPixels = 24.0f;
-      const float eye_shift_u = (Vr_submit_width > 0)
-                                    ? (kVrMenuEyeShiftPixels / static_cast<float>(Vr_submit_width))
-                                    : 0.0f;
-
-      vr::VRTextureBounds_t left_bounds{-eye_shift_u, 1.0f - eye_shift_u, 0.0f, 1.0f};
-      vr::VRTextureBounds_t right_bounds{eye_shift_u, 1.0f + eye_shift_u, 0.0f, 1.0f};
-      vr::VRCompositor()->Submit(vr::Eye_Left, &shared_texture, &left_bounds);
-      vr::VRCompositor()->Submit(vr::Eye_Right, &shared_texture, &right_bounds);
+    if (Vr_submit_left.texture != 0 && Vr_submit_right.texture != 0) {
+      vr::Texture_t left_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
+                                    vr::TextureType_OpenGL, vr::ColorSpace_Auto};
+      vr::Texture_t right_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_right.texture)),
+                                     vr::TextureType_OpenGL, vr::ColorSpace_Auto};
+      vr::VRCompositor()->Submit(vr::Eye_Left, &left_texture);
+      vr::VRCompositor()->Submit(vr::Eye_Right, &right_texture);
     }
   }
 }
