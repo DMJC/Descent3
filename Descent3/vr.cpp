@@ -485,16 +485,22 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   vector camera_pos = eye_offset;
   matrix camera_orient = Identity_matrix;
   float zoom = D3_DEFAULT_ZOOM;
+  constexpr float kCinemaScreenRadius = 5.0f;
+  const bool stereo_projection = (Vr_render_mode == VrRenderMode::Stereo);
   
-  // Use REGULAR g3_StartFrame - no stereo frustum needed
-  g3_StartFrame(&camera_pos, &camera_orient, zoom);
+  if (stereo_projection) {
+    g3_StartFrameStereo(&camera_pos, &camera_orient, zoom, is_left_eye, VR_GetStereoEyeSeparation(),
+                        kCinemaScreenRadius);
+  } else {
+    g3_StartFrame(&camera_pos, &camera_orient, zoom);
+  }
   
   float u_max = Vr_menu_texture_registered ? 1.0f : 
                 static_cast<float>(Vr_menu_width) / static_cast<float>(Vr_menu_texture_size);
   float v_max = Vr_menu_texture_registered ? 1.0f : 
                 static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
   
-  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, 120.0f, 5.0f, 3.0f);
+  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, 120.0f, kCinemaScreenRadius, 3.0f);
 
   g3_EndFrame();
   EndFrame();
@@ -575,7 +581,7 @@ void VR_InitFromCommandLine() {
 
     g3StereoFrustum left_frustum{left_l, left_r, -left_t, -left_b};
     g3StereoFrustum right_frustum{right_l, right_r, -right_t, -right_b};
-    g3_SetStereoFrustum(&right_frustum, &left_frustum);
+    g3_SetStereoFrustum(&left_frustum, &right_frustum);
   }
 
   if (Vr_openvr_ready) {
