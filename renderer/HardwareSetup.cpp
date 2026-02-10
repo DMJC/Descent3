@@ -29,6 +29,10 @@ static float sAspect = 0.0f;
 static g3StereoFrustum sStereoFrustum[2];
 bool sStereoFrustumValid = false;
 
+// Forward declaration for stereo projection path used by g3_StartFrame.
+void g3_GetStereoProjectionMatrix(float zoom, bool is_left_eye, float eye_separation, float convergence_distance,
+                                  float *projMat);
+
 // allows the user to specify an aspect ratio that overrides the renderer's
 // The parameter is the w/h of the screen pixels
 void g3_SetAspectRatio(float aspect) { sAspect = aspect; }
