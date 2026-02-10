@@ -615,7 +615,9 @@ void DoUIFrame() {
     UI_frame_result = NEWUIRES_FORCEQUIT;
   } else {
     const bool vr_menu_mode = VR_IsEnabled() && GetFunctionMode() == MENU_MODE;
+    LOG_INFO.printf("VR-MENU-TRACE: DoUIFrame begin vr_menu_mode=%d mode=%d", vr_menu_mode ? 1 : 0, GetFunctionMode());
     if (vr_menu_mode) {
+      LOG_INFO << "VR-MENU-TRACE: stage=VR_BeginMenuFramebufferRender";
       VR_BeginMenuFramebufferRender();
     }
 
@@ -635,13 +637,17 @@ void DoUIFrame() {
       Sound_system.EndSoundFrame();
     }
 
+    LOG_INFO << "VR-MENU-TRACE: stage=ui_DoFrame";
     UI_frame_result = ui_DoFrame();
+    LOG_INFO.printf("VR-MENU-TRACE: stage=ui_DoFrame done result=%d", UI_frame_result);
 
     if (vr_menu_mode) {
       // End FBO rendering and switch back to window
+      LOG_INFO << "VR-MENU-TRACE: stage=VR_EndMenuFramebufferRender";
       VR_EndMenuFramebufferRender();
-      
+
       // Now render the VR cinema screen using the FBO texture
+      LOG_INFO << "VR-MENU-TRACE: stage=VR_RenderMenuFrame";
       VR_RenderMenuFrame();
     }
   }
@@ -658,7 +664,10 @@ void DoUIFrameWithoutInput() {
     UI_frame_result = NEWUIRES_FORCEQUIT;
   } else {
     const bool vr_menu_mode = VR_IsEnabled() && GetFunctionMode() == MENU_MODE;
+    LOG_INFO.printf("VR-MENU-TRACE: DoUIFrameWithoutInput begin vr_menu_mode=%d mode=%d", vr_menu_mode ? 1 : 0,
+                    GetFunctionMode());
     if (vr_menu_mode) {
+      LOG_INFO << "VR-MENU-TRACE: stage=VR_BeginMenuFramebufferRender";
       VR_BeginMenuFramebufferRender();
     }
 
@@ -678,10 +687,14 @@ void DoUIFrameWithoutInput() {
       Sound_system.EndSoundFrame();
     }
 
+    LOG_INFO << "VR-MENU-TRACE: stage=ui_DoFrame(false)";
     UI_frame_result = ui_DoFrame(false);
+    LOG_INFO.printf("VR-MENU-TRACE: stage=ui_DoFrame(false) done result=%d", UI_frame_result);
 
     if (vr_menu_mode) {
+      LOG_INFO << "VR-MENU-TRACE: stage=VR_EndMenuFramebufferRender";
       VR_EndMenuFramebufferRender();
+      LOG_INFO << "VR-MENU-TRACE: stage=VR_RenderMenuFrame";
       VR_RenderMenuFrame();
     }
   }

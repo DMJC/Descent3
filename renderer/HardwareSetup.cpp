@@ -36,6 +36,7 @@ float g3_GetAspectRatio() { return sAspect; }
 
 void g3_SetStereoFrustum(const g3StereoFrustum *left, const g3StereoFrustum *right) {
   if (!left || !right) {
+    LOG_INFO << "VR-MENU-TRACE: g3_SetStereoFrustum invalid input";
     sStereoFrustumValid = false;
     return;
   }
@@ -43,6 +44,9 @@ void g3_SetStereoFrustum(const g3StereoFrustum *left, const g3StereoFrustum *rig
   sStereoFrustum[0] = *left;
   sStereoFrustum[1] = *right;
   sStereoFrustumValid = true;
+
+  LOG_INFO.printf("VR-MENU-TRACE: g3_SetStereoFrustum L(l=%f r=%f t=%f b=%f) R(l=%f r=%f t=%f b=%f)", left->left,
+                  left->right, left->top, left->bottom, right->left, right->right, right->top, right->bottom);
 }
 
 void g3_GetViewPortMatrix(float *viewMat) {
@@ -50,6 +54,8 @@ void g3_GetViewPortMatrix(float *viewMat) {
   int viewportWidth, viewportHeight;
   int viewportX, viewportY;
   rend_GetProjectionScreenParameters(viewportX, viewportY, viewportWidth, viewportHeight);
+  LOG_INFO.printf("VR-MENU-TRACE: g3_GetViewPortMatrix viewport x=%d y=%d w=%d h=%d", viewportX, viewportY,
+                  viewportWidth, viewportHeight);
 
   float viewportWidthOverTwo = ((float)viewportWidth) * 0.5f;
   float viewportHeightOverTwo = ((float)viewportHeight) * 0.5f;
@@ -178,7 +184,11 @@ void g3_GetStereoProjectionMatrix(float zoom, bool is_left_eye, float eye_separa
     const float width = (left_eye_width > right_eye_width) ? left_eye_width : right_eye_width;
     const float height = (left_eye_height > right_eye_height) ? left_eye_height : right_eye_height;
 
+    LOG_INFO.printf("VR-MENU-TRACE: g3_GetStereoProjectionMatrix eye=%s frustum(l=%f r=%f t=%f b=%f) shared_w=%f shared_h=%f",
+                    is_left_eye ? "LEFT" : "RIGHT", left, right, top, bottom, width, height);
+
     if (width == 0.0f || height == 0.0f) {
+      LOG_INFO << "VR-MENU-TRACE: g3_GetStereoProjectionMatrix falling back to default projection";
       // Don't invalidate globally, just fall through to default projection
     } else {
       projMat[0] = 2.0f / width;
@@ -188,6 +198,8 @@ void g3_GetStereoProjectionMatrix(float zoom, bool is_left_eye, float eye_separa
       projMat[10] = 1.0f;
       projMat[11] = 1.0f;
       projMat[14] = -1.0f;
+      LOG_INFO.printf("VR-MENU-TRACE: g3_GetStereoProjectionMatrix eye=%s proj00=%f proj11=%f proj20=%f proj21=%f",
+                      is_left_eye ? "LEFT" : "RIGHT", projMat[0], projMat[5], projMat[8], projMat[9]);
       return;
     }
   }
@@ -236,12 +248,13 @@ void g3_StartFrameStereo(vector *view_pos, matrix *view_matrix, float zoom, bool
   g3_GetViewPortMatrix((float *)gTransformViewPort);
   
   // USE STEREO PROJECTION instead of regular
+  LOG_INFO.printf("VR-MENU-TRACE: g3_StartFrameStereo eye=%s zoom=%f eye_sep=%f conv=%f", is_left_eye ? "LEFT" : "RIGHT",
+                  zoom, eye_separation, convergence_distance);
   g3_GetStereoProjectionMatrix(zoom, is_left_eye, eye_separation, convergence_distance, (float *)gTransformProjection);
 
-  LOG_INFO.printf("VR: Eye %s - projMat[0][0]=%f projMat[2][0]=%f sStereoValid=%d",
-          is_left_eye ? "LEFT" : "RIGHT",
-          gTransformProjection[0][0], gTransformProjection[2][0], 
-          sStereoFrustumValid ? 1 : 0);
+  LOG_INFO.printf("VR-MENU-TRACE: g3_StartFrameStereo eye=%s proj00=%f proj11=%f proj20=%f proj21=%f stereoValid=%d",
+                  is_left_eye ? "LEFT" : "RIGHT", gTransformProjection[0][0], gTransformProjection[1][1],
+                  gTransformProjection[2][0], gTransformProjection[2][1], sStereoFrustumValid ? 1 : 0);
   
   g3_GetModelViewMatrix(view_pos, view_matrix, (float *)gTransformModelView);
   g3_UpdateFullTransform();

@@ -1465,6 +1465,8 @@ void rend_SetTextureType(texture_type state) {
 }
 
 void rend_StartFrame(int x1, int y1, int x2, int y2, int clear_flags) {
+  LOG_INFO.printf("VR-MENU-TRACE: rend_StartFrame x1=%d y1=%d x2=%d y2=%d w=%d h=%d clear_flags=0x%x", x1, y1, x2,
+                  y2, x2 - x1, y2 - y1, clear_flags);
   if (clear_flags & RF_CLEAR_ZBUFFER) {
     dglClear(GL_DEPTH_BUFFER_BIT);
   }

@@ -19,6 +19,7 @@
 #include <cstring>
 
 #include "3d.h"
+#include "log.h"
 #include "HardwareInternal.h"
 #include "renderer.h"
 
@@ -88,6 +89,7 @@ void g3_RefreshTransforms(bool usePassthru) {
   }
 
   if (usePassthru) {
+    LOG_INFO << "VR-MENU-TRACE: g3_RefreshTransforms stage=passthru";
     // setup OpenGL to use pass-thru
     rend_TransformSetToPassthru();
   } else {
@@ -95,6 +97,8 @@ void g3_RefreshTransforms(bool usePassthru) {
     int viewportWidth, viewportHeight, viewportX, viewportY;
     rend_GetProjectionScreenParameters(viewportX, viewportY, viewportWidth, viewportHeight);
 
+    LOG_INFO.printf("VR-MENU-TRACE: g3_RefreshTransforms stage=full viewport x=%d y=%d w=%d h=%d", viewportX,
+                    viewportY, viewportWidth, viewportHeight);
     // setup OpenGL to use full transform stack
     // TODO: in the future we only need to set those that have changed
     rend_TransformSetViewport(viewportX, viewportY, viewportWidth, viewportHeight);
