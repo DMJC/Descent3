@@ -626,11 +626,11 @@ void VR_RenderMenuFrame() {
   
   // Render the curved cinema screen for each eye
   if (Vr_render_mode == VrRenderMode::Stereo) {
-    const float eye_offset = VR_GetStereoEyeSeparation() * 0.5f;
-    vector left_eye_offset{-eye_offset, 0.0f, 0.0f};
-    vector right_eye_offset{eye_offset, 0.0f, 0.0f};
-    VR_RenderCinemaScreenForEye(Vr_submit_left, left_eye_offset, true);
-    VR_RenderCinemaScreenForEye(Vr_submit_right, right_eye_offset, false);
+    // Keep menu projection identical per-eye to avoid menu-only stereo scaling mismatches.
+    // The curved screen geometry still renders in 3D, but both eyes use the same centered view.
+    vector zero_offset{0.0f, 0.0f, 0.0f};
+    VR_RenderCinemaScreenForEye(Vr_submit_left, zero_offset, true);
+    VR_RenderCinemaScreenForEye(Vr_submit_right, zero_offset, false);
   } else {
     // Cinema mode: both eyes see the same centered view
     vector zero_offset{0.0f, 0.0f, 0.0f};
