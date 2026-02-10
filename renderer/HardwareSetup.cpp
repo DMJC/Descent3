@@ -100,11 +100,16 @@ void g3_GetProjectionMatrix(float zoom, float *projMat) {
   projMat[10] = 1.0f;
   projMat[11] = 1.0f;
   projMat[14] = -1.0f;
+
+  LOG_INFO.printf("VR-MENU-TRACE: g3_GetProjectionMatrix zoom=%f viewport_w=%d viewport_h=%d proj00=%f proj11=%f", zoom,
+                  viewportWidth, viewportHeight, projMat[0], projMat[5]);
 }
 
 // start the frame
 void g3_StartFrame(vector *view_pos, matrix *view_matrix, float zoom) {
   // initialize the viewport transform
+  LOG_INFO.printf("VR-MENU-TRACE: g3_StartFrame zoom=%f view_pos=(%f,%f,%f)", zoom, view_pos->x(), view_pos->y(),
+                  view_pos->z());
   g3_GetViewPortMatrix((float *)gTransformViewPort);
   g3_GetProjectionMatrix(zoom, (float *)gTransformProjection);
   g3_GetModelViewMatrix(view_pos, view_matrix, (float *)gTransformModelView);
@@ -116,6 +121,8 @@ void g3_StartFrame(vector *view_pos, matrix *view_matrix, float zoom) {
   // Set vars for projection
   Window_w2 = ((scalar)Window_width) * 0.5f;
   Window_h2 = ((scalar)Window_height) * 0.5f;
+  LOG_INFO.printf("VR-MENU-TRACE: g3_StartFrame projection window_w=%d window_h=%d window_w2=%f window_h2=%f", Window_width,
+                  Window_height, Window_w2, Window_h2);
 
   // ISB trick: use the window aspect only, screen aspect ratio
   // is not important because we assume pixels are square

@@ -78,6 +78,10 @@ void g3_UpdateFullTransform() {
 
   // projection  -> ViewPort
   g3_TransformMult(gTransformFull, gTransformFull, gTransformViewPort);
+
+  LOG_INFO.printf("VR-MENU-TRACE: g3_UpdateFullTransform proj00=%f proj11=%f proj20=%f proj21=%f viewport00=%f viewport11=%f",
+                  gTransformProjection[0][0], gTransformProjection[1][1], gTransformProjection[2][0],
+                  gTransformProjection[2][1], gTransformViewPort[0][0], gTransformViewPort[1][1]);
 }
 
 void g3_ForceTransformRefresh(void) { sUseTransformPassthru = -1; }

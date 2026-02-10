@@ -213,6 +213,8 @@ void rend_GetProjectionScreenParameters(int &screenLX, int &screenTY, int &scree
   // Keeping these APIs consistent avoids projection/viewport scale drift.
   screenW = gpu_state.clip_x2 - gpu_state.clip_x1;
   screenH = gpu_state.clip_y2 - gpu_state.clip_y1;
+  LOG_INFO.printf("VR-MENU-TRACE: rend_GetProjectionScreenParameters x=%d y=%d w=%d h=%d", screenLX, screenTY, screenW,
+                  screenH);
 }
 
 // Returns the aspect ratio of the physical screen
