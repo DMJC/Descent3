@@ -41,8 +41,9 @@ float g3_GetAspectRatio() { return sAspect; }
 
 void g3_SetStereoFrustum(const g3StereoFrustum *left, const g3StereoFrustum *right) {
   if (!left || !right) {
-    LOG_INFO << "VR-MENU-TRACE: g3_SetStereoFrustum invalid input";
-    sStereoFrustumValid = false;
+    // Keep the last valid stereo frustums instead of dropping back to mono
+    // projection mid-frame if a transient null input occurs.
+    LOG_INFO << "VR-MENU-TRACE: g3_SetStereoFrustum invalid input (preserving previous stereo frustums)";
     return;
   }
 
@@ -141,6 +142,7 @@ void g3_StartFrame(vector *view_pos, matrix *view_matrix, float zoom) {
 
     g3_GetStereoProjectionMatrix(zoom, use_left_slot, 0.0f, 0.0f, (float *)gTransformProjection);
   } else {
+    LOG_INFO << "VR-MENU-TRACE: g3_StartFrame stereo frustum invalid -> mono projection";
     g3_GetProjectionMatrix(zoom, (float *)gTransformProjection);
   }
   g3_GetModelViewMatrix(view_pos, view_matrix, (float *)gTransformModelView);
