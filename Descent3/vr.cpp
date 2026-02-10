@@ -481,7 +481,7 @@ vector VR_GetOpenVREyeOffset(vr::Hmd_Eye eye, bool is_left_eye) {
 }
 
 // Then in your render function:
-void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, float horizontal_offset) {
+void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, float horizontal_offset, bool is_left_eye) {
   if (!VR_EnsureSubmitSurface(surface)) {
     return;
   }
@@ -498,7 +498,7 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, float horizontal_offs
 
   // Render a single shared menu image from head center and translate the
   // curved polygon to tune alignment without creating per-eye texture variance.
-  vector camera_pos{0.0f, 0.0f, 0.0f};
+  vector camera_pos = is_left_eye ? vector{-0.5f, 0.0f, 0.0f} : vector{0.5f, 0.0f, 0.0f};
   matrix camera_orient = Identity_matrix;
   float zoom = D3_DEFAULT_ZOOM;
   g3_StartFrame(&camera_pos, &camera_orient, zoom);
@@ -651,8 +651,8 @@ void VR_RenderMenuFrame() {
     right_menu_offset = convergence_center_x - per_eye_curve_shift;
   }
 
-  VR_RenderCinemaScreenForEye(Vr_submit_left, left_menu_offset);
-  VR_RenderCinemaScreenForEye(Vr_submit_right, right_menu_offset);
+  VR_RenderCinemaScreenForEye(Vr_submit_left, left_menu_offset, true);
+  VR_RenderCinemaScreenForEye(Vr_submit_right, right_menu_offset, false);
 
   // Blit the menu texture to the monitor window
   VR_BlitMenuTextureToWindow();
