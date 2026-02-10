@@ -638,25 +638,31 @@ void VR_RenderMenuFrame() {
   // The menu has already been rendered to Vr_menu_fbo_texture
   
   // Render a single curved cinema screen texture shared by both eyes.
-  float menu_horizontal_offset = 0.0f;
-  if (Vr_system) {
-    const vector left_eye_offset = VR_GetOpenVREyeOffset(vr::Eye_Left, true);
-    const vector right_eye_offset = VR_GetOpenVREyeOffset(vr::Eye_Right, false);
-    menu_horizontal_offset = -0.5f * (left_eye_offset.x() + right_eye_offset.x());
-  }
-
-  VR_RenderCinemaScreenForEye(Vr_submit_left, menu_horizontal_offset);
+  VR_RenderCinemaScreenForEye(Vr_submit_left, 0.0f);
 
   // Blit the menu texture to the monitor window
   VR_BlitMenuTextureToWindow();
 
-  // Submit to OpenVR
+  // Submit to OpenVR with opposite per-eye horizontal shifts to remove menu
+  // stereo doubling while still using one shared texture.
   if (Vr_openvr_ready && vr::VRCompositor()) {
     if (Vr_submit_left.texture != 0) {
       vr::Texture_t shared_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
                                       vr::TextureType_OpenGL, vr::ColorSpace_Auto};
-      vr::VRCompositor()->Submit(vr::Eye_Left, &shared_texture);
-      vr::VRCompositor()->Submit(vr::Eye_Right, &shared_texture);
+
+      float eye_shift_u = 0.0f;
+      if (Vr_system) {
+        const vector left_eye_offset = VR_GetOpenVREyeOffset(vr::Eye_Left, true);
+        const vector right_eye_offset = VR_GetOpenVREyeOffset(vr::Eye_Right, false);
+        const float half_eye_span = 0.5f * std::fabs(right_eye_offset.x() - left_eye_offset.x());
+        constexpr float kVrMenuDepth = 5.0f;
+        eye_shift_u = std::min(0.1f, half_eye_span / kVrMenuDepth);
+      }
+
+      vr::VRTextureBounds_t left_bounds{-eye_shift_u, 1.0f - eye_shift_u, 0.0f, 1.0f};
+      vr::VRTextureBounds_t right_bounds{eye_shift_u, 1.0f + eye_shift_u, 0.0f, 1.0f};
+      vr::VRCompositor()->Submit(vr::Eye_Left, &shared_texture, &left_bounds);
+      vr::VRCompositor()->Submit(vr::Eye_Right, &shared_texture, &right_bounds);
     }
   }
 }
