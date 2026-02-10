@@ -345,7 +345,8 @@ void VR_UpdateOpenVRPoses() {
   vr::VRCompositor()->WaitGetPoses(poses, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
 }
 
-void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max, float arc_degrees, float radius, float height) {
+void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max, float arc_degrees, float radius, float height,
+                        float horizontal_offset) {
   const int num_segments = 32;
   const float arc_radians = arc_degrees * (3.14159265f / 180.0f);
   const float angle_step = arc_radians / num_segments;
@@ -357,7 +358,7 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max, float arc
   
   for (int i = 0; i <= num_segments; ++i) {
     float angle = start_angle + (i * angle_step);
-    float x = sinf(angle) * radius;
+    float x = (sinf(angle) * radius) + horizontal_offset;
     float z = cosf(angle) * radius;
     
     vector top_pos{x, height / 2.0f, z};
@@ -480,7 +481,7 @@ vector VR_GetOpenVREyeOffset(vr::Hmd_Eye eye, bool is_left_eye) {
 }
 
 // Then in your render function:
-void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, vr::Hmd_Eye eye, bool is_left_eye) {
+void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, float horizontal_offset) {
   if (!VR_EnsureSubmitSurface(surface)) {
     return;
   }
@@ -491,32 +492,27 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, vr::Hmd_Eye eye, bool
 
   int render_width = Max_window_w;
   int render_height = Max_window_h;
-  
+
   StartFrame(0, 0, render_width, render_height);
   rend_ClearScreen(GR_BLACK);
 
-  const vector eye_offset = VR_GetOpenVREyeOffset(eye, is_left_eye);
-
-  // Use the OpenVR eye translation for view origin and stereo projection so
-  // both eyes converge on the same cinema-screen center point.
-  vector camera_pos = eye_offset;
+  // Render a single shared menu image from head center and translate the
+  // curved polygon to tune alignment without creating per-eye texture variance.
+  vector camera_pos{0.0f, 0.0f, 0.0f};
   matrix camera_orient = Identity_matrix;
   float zoom = D3_DEFAULT_ZOOM;
-  constexpr float kVrMenuConvergenceDistance = 5.0f;
+  g3_StartFrame(&camera_pos, &camera_orient, zoom);
 
-  g3_StartFrameStereo(&camera_pos, &camera_orient, zoom, is_left_eye, VR_GetStereoEyeSeparation(),
-                      kVrMenuConvergenceDistance);
-  
-  float u_max = Vr_menu_texture_registered ? 1.0f : 
+  float u_max = Vr_menu_texture_registered ? 1.0f :
                 static_cast<float>(Vr_menu_width) / static_cast<float>(Vr_menu_texture_size);
-  float v_max = Vr_menu_texture_registered ? 1.0f : 
+  float v_max = Vr_menu_texture_registered ? 1.0f :
                 static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
-  
-  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, 120.0f, 5.0f, 3.0f);
+
+  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, 120.0f, 5.0f, 3.0f, horizontal_offset);
 
   g3_EndFrame();
   EndFrame();
-  
+
   auto screenshot = rend_Screenshot();
   if (screenshot && screenshot->getData()) {
     VR_UpdateSubmitSurface(*screenshot, surface, false);
@@ -641,28 +637,26 @@ void VR_RenderMenuFrame() {
 
   // The menu has already been rendered to Vr_menu_fbo_texture
   
-  // Render the curved cinema screen for each eye
-  if (Vr_render_mode == VrRenderMode::Stereo) {
-    VR_RenderCinemaScreenForEye(Vr_submit_left, vr::Eye_Left, true);
-    VR_RenderCinemaScreenForEye(Vr_submit_right, vr::Eye_Right, false);
-  } else {
-    // Cinema mode: eye renders stay aligned with OpenVR eye offsets.
-    VR_RenderCinemaScreenForEye(Vr_submit_left, vr::Eye_Left, true);
-    VR_RenderCinemaScreenForEye(Vr_submit_right, vr::Eye_Right, false);
+  // Render a single curved cinema screen texture shared by both eyes.
+  float menu_horizontal_offset = 0.0f;
+  if (Vr_system) {
+    const vector left_eye_offset = VR_GetOpenVREyeOffset(vr::Eye_Left, true);
+    const vector right_eye_offset = VR_GetOpenVREyeOffset(vr::Eye_Right, false);
+    menu_horizontal_offset = -0.5f * (left_eye_offset.x() + right_eye_offset.x());
   }
+
+  VR_RenderCinemaScreenForEye(Vr_submit_left, menu_horizontal_offset);
 
   // Blit the menu texture to the monitor window
   VR_BlitMenuTextureToWindow();
 
   // Submit to OpenVR
   if (Vr_openvr_ready && vr::VRCompositor()) {
-    if (Vr_submit_left.texture != 0 && Vr_submit_right.texture != 0) {
-      vr::Texture_t left_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
-                                    vr::TextureType_OpenGL, vr::ColorSpace_Auto};
-      vr::Texture_t right_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_right.texture)),
-                                     vr::TextureType_OpenGL, vr::ColorSpace_Auto};
-      vr::VRCompositor()->Submit(vr::Eye_Left, &left_texture);
-      vr::VRCompositor()->Submit(vr::Eye_Right, &right_texture);
+    if (Vr_submit_left.texture != 0) {
+      vr::Texture_t shared_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
+                                      vr::TextureType_OpenGL, vr::ColorSpace_Auto};
+      vr::VRCompositor()->Submit(vr::Eye_Left, &shared_texture);
+      vr::VRCompositor()->Submit(vr::Eye_Right, &shared_texture);
     }
   }
 }
