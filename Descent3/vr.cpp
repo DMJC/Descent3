@@ -486,8 +486,13 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   matrix camera_orient = Identity_matrix;
   float zoom = D3_DEFAULT_ZOOM;
   
-  // Use REGULAR g3_StartFrame - no stereo frustum needed
-  g3_StartFrame(&camera_pos, &camera_orient, zoom);
+  if (VR_IsStereoRendering()) {
+    constexpr float kVrMenuConvergenceDistance = 30.0f;
+    g3_StartFrameStereo(&camera_pos, &camera_orient, zoom, is_left_eye, VR_GetStereoEyeSeparation(),
+                        kVrMenuConvergenceDistance);
+  } else {
+    g3_StartFrame(&camera_pos, &camera_orient, zoom);
+  }
   
   float u_max = Vr_menu_texture_registered ? 1.0f : 
                 static_cast<float>(Vr_menu_width) / static_cast<float>(Vr_menu_texture_size);
@@ -573,8 +578,10 @@ void VR_InitFromCommandLine() {
     Vr_system->GetProjectionRaw(vr::Eye_Left, &left_l, &left_r, &left_t, &left_b);
     Vr_system->GetProjectionRaw(vr::Eye_Right, &right_l, &right_r, &right_t, &right_b);
 
-    g3StereoFrustum left_frustum{left_l, left_r, -left_t, -left_b};
-    g3StereoFrustum right_frustum{right_l, right_r, -right_t, -right_b};
+    const float common_t = (left_t + right_t) * 0.5f;
+    const float common_b = (left_b + right_b) * 0.5f;
+    g3StereoFrustum left_frustum{left_l, left_r, -common_t, -common_b};
+    g3StereoFrustum right_frustum{right_l, right_r, -common_t, -common_b};
     g3_SetStereoFrustum(&right_frustum, &left_frustum);
   }
 
@@ -625,18 +632,9 @@ void VR_RenderMenuFrame() {
   
   // Render the curved cinema screen for each eye
   if (Vr_render_mode == VrRenderMode::Stereo) {
-    // Get the proper eye-to-head transforms from OpenVR
-    auto left_eye_transform = Vr_system->GetEyeToHeadTransform(vr::Eye_Left);
-    auto right_eye_transform = Vr_system->GetEyeToHeadTransform(vr::Eye_Right);
-    
-    // Extract translation from the 3x4 matrix (last column)
-    vector left_eye_offset{left_eye_transform.m[0][3], 
-                          left_eye_transform.m[1][3], 
-                          left_eye_transform.m[2][3]};
-    vector right_eye_offset{right_eye_transform.m[0][3], 
-                           right_eye_transform.m[1][3], 
-                           right_eye_transform.m[2][3]};
-
+    const float eye_offset = VR_GetStereoEyeSeparation() * 0.5f;
+    vector left_eye_offset{-eye_offset, 0.0f, 0.0f};
+    vector right_eye_offset{eye_offset, 0.0f, 0.0f};
     VR_RenderCinemaScreenForEye(Vr_submit_left, left_eye_offset, true);
     VR_RenderCinemaScreenForEye(Vr_submit_right, right_eye_offset, false);
   } else {
