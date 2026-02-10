@@ -467,7 +467,7 @@ void VR_InitStereoFrustums() {
 }
 
 // Then in your render function:
-void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_offset, bool is_left_eye) {
+void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_offset, bool /*is_left_eye*/) {
   if (!VR_EnsureSubmitSurface(surface)) {
     return;
   }
@@ -495,8 +495,9 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   float v_max = Vr_menu_texture_registered ? 1.0f : 
                 static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
   
-  const float eye_offset = VR_GetStereoEyeSeparation() * 0.5f;
-  const float stereo_offset = is_left_eye ? -eye_offset : eye_offset;
+  // Keep cinema-screen correction tied to the actual per-eye camera transform
+  // so sign/convention mismatches cannot reintroduce stereo doubling.
+  const float stereo_offset = eye_offset.x;
   VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, 120.0f, 5.0f, 3.0f, stereo_offset);
 
   g3_EndFrame();
