@@ -495,13 +495,15 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, vr::Hmd_Eye eye, bool
 
   const vector eye_offset = VR_GetOpenVREyeOffset(eye, is_left_eye);
 
-  // Use eye offset as camera position
+  // Use the OpenVR eye translation for view origin and stereo projection so
+  // both eyes converge on the same cinema-screen center point.
   vector camera_pos = eye_offset;
   matrix camera_orient = Identity_matrix;
   float zoom = D3_DEFAULT_ZOOM;
-  
-  // Use REGULAR g3_StartFrame - no stereo frustum needed
-  g3_StartFrame(&camera_pos, &camera_orient, zoom);
+  constexpr float kVrMenuConvergenceDistance = 5.0f;
+
+  g3_StartFrameStereo(&camera_pos, &camera_orient, zoom, is_left_eye, VR_GetStereoEyeSeparation(),
+                      kVrMenuConvergenceDistance);
   
   float u_max = Vr_menu_texture_registered ? 1.0f : 
                 static_cast<float>(Vr_menu_width) / static_cast<float>(Vr_menu_texture_size);
