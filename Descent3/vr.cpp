@@ -475,9 +475,13 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
     return;
   }
 
+  constexpr float kCinemaArcDegrees = 120.0f;
+  constexpr float kCinemaScreenRadius = 5.0f;
+  constexpr float kCinemaScreenHeight = 3.0f;
+
   int render_width = Max_window_w;
   int render_height = Max_window_h;
-  
+
   StartFrame(0, 0, render_width, render_height);
   rend_ClearScreen(GR_BLACK);
 
@@ -485,26 +489,30 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   vector camera_pos = eye_offset;
   matrix camera_orient = Identity_matrix;
   float zoom = D3_DEFAULT_ZOOM;
-  constexpr float kCinemaScreenRadius = 5.0f;
   const bool stereo_projection = (Vr_render_mode == VrRenderMode::Stereo);
-  
+
   if (stereo_projection) {
+    // Converge at the center of the curved cinema display (angle = 0 section).
+    const vector cinema_center{0.0f, 0.0f, kCinemaScreenRadius};
+    const float convergence_distance = vm_VectorDistance(&camera_pos, &cinema_center);
     g3_StartFrameStereo(&camera_pos, &camera_orient, zoom, is_left_eye, VR_GetStereoEyeSeparation(),
-                        kCinemaScreenRadius);
+                        convergence_distance);
   } else {
     g3_StartFrame(&camera_pos, &camera_orient, zoom);
   }
-  
-  float u_max = Vr_menu_texture_registered ? 1.0f : 
-                static_cast<float>(Vr_menu_width) / static_cast<float>(Vr_menu_texture_size);
-  float v_max = Vr_menu_texture_registered ? 1.0f : 
-                static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
-  
-  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, 120.0f, kCinemaScreenRadius, 3.0f);
+
+  float u_max = Vr_menu_texture_registered
+                    ? 1.0f
+                    : static_cast<float>(Vr_menu_width) / static_cast<float>(Vr_menu_texture_size);
+  float v_max = Vr_menu_texture_registered
+                    ? 1.0f
+                    : static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
+
+  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, kCinemaArcDegrees, kCinemaScreenRadius, kCinemaScreenHeight);
 
   g3_EndFrame();
   EndFrame();
-  
+
   auto screenshot = rend_Screenshot();
   if (screenshot && screenshot->getData()) {
     VR_UpdateSubmitSurface(*screenshot, surface, false);
