@@ -651,14 +651,24 @@ void VR_RenderMenuFrame() {
   // Blit the menu texture to the monitor window
   VR_BlitMenuTextureToWindow();
 
-  // Submit the same shared menu texture to both eyes. The convergence-based
-  // translation is already baked into the rendered curved polygon.
+  // Submit the same shared menu texture to both eyes, with a small opposite
+  // horizontal eye shift so left-eye appears right and right-eye appears left.
   if (Vr_openvr_ready && vr::VRCompositor()) {
     if (Vr_submit_left.texture != 0) {
       vr::Texture_t shared_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
                                       vr::TextureType_OpenGL, vr::ColorSpace_Auto};
-      vr::VRCompositor()->Submit(vr::Eye_Left, &shared_texture);
-      vr::VRCompositor()->Submit(vr::Eye_Right, &shared_texture);
+
+      // Positive value shifts the perceived image right in the left eye and
+      // left in the right eye. Tune this if you want stronger/weaker parallax.
+      constexpr float kVrMenuEyeShiftPixels = 24.0f;
+      const float eye_shift_u = (Vr_submit_width > 0)
+                                    ? (kVrMenuEyeShiftPixels / static_cast<float>(Vr_submit_width))
+                                    : 0.0f;
+
+      vr::VRTextureBounds_t left_bounds{-eye_shift_u, 1.0f - eye_shift_u, 0.0f, 1.0f};
+      vr::VRTextureBounds_t right_bounds{eye_shift_u, 1.0f + eye_shift_u, 0.0f, 1.0f};
+      vr::VRCompositor()->Submit(vr::Eye_Left, &shared_texture, &left_bounds);
+      vr::VRCompositor()->Submit(vr::Eye_Right, &shared_texture, &right_bounds);
     }
   }
 }
