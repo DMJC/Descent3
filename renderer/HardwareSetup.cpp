@@ -149,33 +149,26 @@ void g3_StartFrame(vector *view_pos, matrix *view_matrix, float zoom) {
 void g3_GetStereoProjectionMatrix(float zoom, bool is_left_eye, float eye_separation, float convergence_distance, float *projMat) {
   if (sStereoFrustumValid) {
     const g3StereoFrustum &frustum = sStereoFrustum[is_left_eye ? 0 : 1];
-    const g3StereoFrustum &left_frustum = sStereoFrustum[0];
 
     memset(projMat, 0, sizeof(float) * 16);
 
-    // Keep menu magnification locked to a single reference eye (left) and
-    // preserve per-eye frustum center offsets for stereo disparity.
-    // This avoids one eye looking effectively lower-resolution when per-eye
-    // frustum extents are asymmetric.
-    float width = left_frustum.right - left_frustum.left;
-    float height = left_frustum.top - left_frustum.bottom;
+    // Normalize incoming bounds so projection scale is always computed from
+    // a positive eye-specific width/height.
+    const float left = (frustum.left < frustum.right) ? frustum.left : frustum.right;
+    const float right = (frustum.left < frustum.right) ? frustum.right : frustum.left;
+    const float bottom = (frustum.bottom < frustum.top) ? frustum.bottom : frustum.top;
+    const float top = (frustum.bottom < frustum.top) ? frustum.top : frustum.bottom;
 
-    if (width < 0.0f)
-      width = -width;
-    if (height < 0.0f)
-      height = -height;
+    const float width = right - left;
+    const float height = top - bottom;
 
     if (width == 0.0f || height == 0.0f) {
       // Don't invalidate globally, just fall through to default projection
     } else {
       projMat[0] = 2.0f / width;
       projMat[5] = 2.0f / height;
-
-      const float center_x = (frustum.right + frustum.left) * 0.5f;
-      const float center_y = (frustum.top + frustum.bottom) * 0.5f;
-      projMat[8] = (2.0f * center_x) / width;
-      projMat[9] = (2.0f * center_y) / height;
-
+      projMat[8] = (right + left) / width;
+      projMat[9] = (top + bottom) / height;
       projMat[10] = 1.0f;
       projMat[11] = 1.0f;
       projMat[14] = -1.0f;
