@@ -76,48 +76,33 @@ uint8_t g3_RotatePoint(g3Point *dest, vector *src) {
 
 // projects a point
 void g3_ProjectPoint(g3Point *p) {
-  static int entry_count = 0;
-  if (entry_count < 3) {
-    LOG_INFO.printf("VR: g3_ProjectPoint ENTRY, flags=0x%x codes=0x%x", p->p3_flags, p->p3_codes);
-    entry_count++;
-  }
-  
   if (p->p3_flags & PF_PROJECTED || p->p3_codes & CC_BEHIND)
     return;
 
   extern bool sStereoFrustumValid;
-  
-  static int check_count = 0;
-  if (check_count < 3) {
-    LOG_INFO.printf("VR: g3_ProjectPoint after checks, sStereoFrustumValid=%d", sStereoFrustumValid ? 1 : 0);
-    check_count++;
-  }  
   if (sStereoFrustumValid) {
     extern float gTransformProjection[4][4];
-    
-    // LOG to see if this path is used
-    static int log_count = 0;
-    if (log_count < 5) {
-      LOG_INFO.printf("VR: Using stereo projection - proj[0][0]=%f proj[2][0]=%f", 
-                      gTransformProjection[0][0], gTransformProjection[2][0]);
-      log_count++;
-    }
-    
+
     float clip_x = p->p3_x * gTransformProjection[0][0] + p->p3_z * gTransformProjection[2][0];
     float clip_y = p->p3_y * gTransformProjection[1][1] + p->p3_z * gTransformProjection[2][1];
     float clip_w = p->p3_z * gTransformProjection[2][3] + gTransformProjection[3][3];
-    
+
     if (clip_w != 0.0f) {
       float ndc_x = clip_x / clip_w;
       float ndc_y = clip_y / clip_w;
-      
+
       p->p3_sx = Window_w2 + (ndc_x * Window_w2);
       p->p3_sy = Window_h2 - (ndc_y * Window_h2);
-      
-      if (log_count < 5) {
-        LOG_INFO.printf("VR: Point (%f,%f,%f) -> clip(%f,%f,%f) -> ndc(%f,%f) -> screen(%f,%f)",
-                        p->p3_x, p->p3_y, p->p3_z, clip_x, clip_y, clip_w, 
-                        ndc_x, ndc_y, p->p3_sx, p->p3_sy);
+
+      static int stereo_project_log_count = 0;
+      if (stereo_project_log_count < 256) {
+        LOG_INFO.printf(
+            "VR-MENU-TRACE: g3_ProjectPoint stereo p=(%f,%f,%f) proj00=%f proj11=%f proj20=%f proj21=%f clip=(%f,%f,%f) "
+            "ndc=(%f,%f) screen=(%f,%f) w2=(%f,%f)",
+            p->p3_x, p->p3_y, p->p3_z, gTransformProjection[0][0], gTransformProjection[1][1],
+            gTransformProjection[2][0], gTransformProjection[2][1], clip_x, clip_y, clip_w, ndc_x, ndc_y, p->p3_sx,
+            p->p3_sy, Window_w2, Window_h2);
+        stereo_project_log_count++;
       }
     }
   } else {

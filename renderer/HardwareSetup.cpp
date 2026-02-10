@@ -112,6 +112,12 @@ void g3_StartFrame(vector *view_pos, matrix *view_matrix, float zoom) {
                   view_pos->z());
   g3_GetViewPortMatrix((float *)gTransformViewPort);
   g3_GetProjectionMatrix(zoom, (float *)gTransformProjection);
+  if (sStereoFrustumValid) {
+    LOG_INFO.printf("VR-MENU-TRACE: g3_StartFrame stereo-frustum-active L(l=%f r=%f t=%f b=%f) R(l=%f r=%f t=%f b=%f)",
+                    sStereoFrustum[0].left, sStereoFrustum[0].right, sStereoFrustum[0].top, sStereoFrustum[0].bottom,
+                    sStereoFrustum[1].left, sStereoFrustum[1].right, sStereoFrustum[1].top, sStereoFrustum[1].bottom);
+    LOG_INFO << "VR-MENU-TRACE: g3_StartFrame using mono g3_GetProjectionMatrix while stereo frusta are active";
+  }
   g3_GetModelViewMatrix(view_pos, view_matrix, (float *)gTransformModelView);
   g3_UpdateFullTransform();
 
