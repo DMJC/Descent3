@@ -345,7 +345,8 @@ void VR_UpdateOpenVRPoses() {
   vr::VRCompositor()->WaitGetPoses(poses, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
 }
 
-void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max, float arc_degrees, float radius, float height) {
+void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max, float arc_degrees, float radius, float height,
+                         float stereo_offset) {
   const int num_segments = 32;
   const float arc_radians = arc_degrees * (3.14159265f / 180.0f);
   const float angle_step = arc_radians / num_segments;
@@ -357,7 +358,7 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max, float arc
   
   for (int i = 0; i <= num_segments; ++i) {
     float angle = start_angle + (i * angle_step);
-    float x = sinf(angle) * radius;
+    float x = sinf(angle) * radius + stereo_offset;
     float z = cosf(angle) * radius;
     
     vector top_pos{x, height / 2.0f, z};
@@ -466,7 +467,7 @@ void VR_InitStereoFrustums() {
 }
 
 // Then in your render function:
-void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_offset, bool is_left_eye) {
+void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_offset, bool /*is_left_eye*/) {
   if (!VR_EnsureSubmitSurface(surface)) {
     return;
   }
@@ -494,7 +495,10 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   float v_max = Vr_menu_texture_registered ? 1.0f : 
                 static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
   
-  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, 120.0f, 5.0f, 3.0f);
+  // Keep cinema-screen correction tied to the actual per-eye camera transform
+  // so sign/convention mismatches cannot reintroduce stereo doubling.
+  const float stereo_offset = eye_offset.x;
+  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, 120.0f, 5.0f, 3.0f, stereo_offset);
 
   g3_EndFrame();
   EndFrame();
