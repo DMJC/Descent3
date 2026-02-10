@@ -407,7 +407,7 @@ extern float gTransformViewPort[4][4];
 extern float gTransformProjection[4][4];
 extern float gTransformModelView[4][4];
 extern float gTransformFull[4][4];
-
+extern bool sStereoFrustumValid;
 void g3_RefreshTransforms(bool usePassthru);
 
 #endif

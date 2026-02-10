@@ -124,9 +124,11 @@ int VR_NextPowerOfTwo(int value) {
   return size;
 }
 
+// In VR_EnsureMenuBitmap(), change the desired size:
 void VR_EnsureMenuBitmap() {
-  const int desired_width = std::max<int>(Max_window_w, kVrTargetWidth);
-  const int desired_height = std::max<int>(Max_window_h, kVrTargetHeight);
+  // Use VR target resolution for higher quality
+  const int desired_width = Max_window_w;
+  const int desired_height = Max_window_h;
   const int desired_texture_size = VR_NextPowerOfTwo(std::max(desired_width, desired_height));
 
   if (Vr_menu_width == desired_width && Vr_menu_height == desired_height && Vr_menu_texture_size == desired_texture_size &&
@@ -167,7 +169,10 @@ void VR_EnsureMenuBitmap() {
   Vr_menu_height = desired_height;
   Vr_menu_texture_size = desired_texture_size;
 
-  // Create FBO texture
+  LOG_INFO.printf("VR: Creating menu FBO at %dx%d (texture size %d)", 
+                  Vr_menu_width, Vr_menu_height, Vr_menu_texture_size);
+
+  // Create FBO texture at VR resolution
   gl.gen_textures(1, &Vr_menu_fbo_texture);
   gl.bind_texture(GL_TEXTURE_2D, Vr_menu_fbo_texture);
   gl.tex_parameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -194,7 +199,7 @@ void VR_EnsureMenuBitmap() {
 
   gl.bind_framebuffer(GL_FRAMEBUFFER, 0);
 
-  // Also create the game's internal bitmap that references this GL texture
+  // Create bitmap
   Vr_menu_bitmap = bm_AllocBitmap(Vr_menu_texture_size, Vr_menu_texture_size, 0);
   if (Vr_menu_bitmap < 0) {
     LOG_WARNING << "VR: Unable to allocate menu bitmap for cinema screen.";
@@ -341,104 +346,155 @@ void VR_UpdateOpenVRPoses() {
 }
 
 void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max, float arc_degrees, float radius, float height) {
-  constexpr int kSegments = 32;
+  const int num_segments = 32;
+  const float arc_radians = arc_degrees * (3.14159265f / 180.0f);
+  const float angle_step = arc_radians / num_segments;
+  const float start_angle = -arc_radians / 2.0f;
+  
+  g3Point points[(num_segments + 1) * 2];
+  g3Point *top_strip[num_segments + 1];
+  g3Point *bottom_strip[num_segments + 1];
+  
+  for (int i = 0; i <= num_segments; ++i) {
+    float angle = start_angle + (i * angle_step);
+    float x = sinf(angle) * radius;
+    float z = cosf(angle) * radius;
+    
+    vector top_pos{x, height / 2.0f, z};
+    vector bottom_pos{x, -height / 2.0f, z};
+    
+    int top_idx = i * 2;
+    int bottom_idx = i * 2 + 1;
+    
+    g3_RotatePoint(&points[top_idx], &top_pos);
+    g3_RotatePoint(&points[bottom_idx], &bottom_pos);
+    
+    points[top_idx].p3_flags |= PF_UV;
+    points[bottom_idx].p3_flags |= PF_UV;
+    
+    float u = (float)i / num_segments * u_max;
+    // FLIP V: top gets v_max, bottom gets 0
+    points[top_idx].p3_u = u;
+    points[top_idx].p3_v = v_max;  // Changed from 0.0f
+    points[bottom_idx].p3_u = u;
+    points[bottom_idx].p3_v = 0.0f;  // Changed from v_max
+    
+    top_strip[i] = &points[top_idx];
+    bottom_strip[i] = &points[bottom_idx];
+  }
+  
+  rend_SetTextureType(TT_LINEAR);
+  rend_SetLighting(LS_NONE);
+  rend_SetAlphaType(AT_CONSTANT);
+  rend_SetAlphaValue(255);
+  
+  for (int i = 0; i < num_segments; ++i) {
+    g3Point *quad[4] = {
+      top_strip[i],
+      top_strip[i + 1],
+      bottom_strip[i + 1],
+      bottom_strip[i]
+    };
+    g3_DrawPoly(4, quad, texture_handle);
+  }
+}
 
-  const float arc_radians = arc_degrees * (kPi / 180.0f);
-  const float start_angle = -arc_radians * 0.5f;
-  const float delta = arc_radians / static_cast<float>(kSegments);
-  const float half_height = height * 0.5f;
+void VR_DrawTestQuad(int texture_handle, float u_max, float v_max) {
+  constexpr float width = 3.0f;
+  constexpr float height = 2.25f;  // 4:3 aspect ratio
+  constexpr float distance = 5.0f;
+  
+  // Quad in front of camera, camera looks down -Z
+  vector p0{-width/2, height/2, -distance};
+  vector p1{width/2, height/2, -distance};
+  vector p2{width/2, -height/2, -distance};
+  vector p3{-width/2, -height/2, -distance};
+
+  g3Point points[4];
+  g3Point *point_list[4] = {&points[0], &points[1], &points[2], &points[3]};
+
+  g3_RotatePoint(&points[0], &p0);
+  g3_RotatePoint(&points[1], &p1);
+  g3_RotatePoint(&points[2], &p2);
+  g3_RotatePoint(&points[3], &p3);
+  
+  LOG_INFO.printf("VR: Transformed points - p0=(%f,%f,%f) p1=(%f,%f,%f)", 
+                  points[0].p3_sx, points[0].p3_sy, points[0].p3_z,
+                  points[1].p3_sx, points[1].p3_sy, points[1].p3_z);
+
+  // Set texture coordinates with V flipped
+  points[0].p3_flags |= PF_UV;
+  points[1].p3_flags |= PF_UV;
+  points[2].p3_flags |= PF_UV;
+  points[3].p3_flags |= PF_UV;
+
+  points[0].p3_u = 0.0f;
+  points[0].p3_v = v_max;
+  points[1].p3_u = u_max;
+  points[1].p3_v = v_max;
+  points[2].p3_u = u_max;
+  points[2].p3_v = 0.0f;
+  points[3].p3_u = 0.0f;
+  points[3].p3_v = 0.0f;
 
   rend_SetZBufferState(0);
   rend_SetTextureType(TT_LINEAR);
   rend_SetLighting(LS_NONE);
   rend_SetAlphaType(AT_CONSTANT_TEXTURE);
   rend_SetAlphaValue(255);
-
-  for (int i = 0; i < kSegments; ++i) {
-    const float a0 = start_angle + (delta * i);
-    const float a1 = a0 + delta;
-
-    vector p0{std::sin(a0) * radius, -half_height, std::cos(a0) * radius};
-    vector p1{std::sin(a1) * radius, -half_height, std::cos(a1) * radius};
-    vector p2{std::sin(a1) * radius, half_height, std::cos(a1) * radius};
-    vector p3{std::sin(a0) * radius, half_height, std::cos(a0) * radius};
-
-    g3Point points[4];
-    g3Point *point_list[4] = {&points[0], &points[1], &points[2], &points[3]};
-
-    g3_RotatePoint(&points[0], &p0);
-    g3_RotatePoint(&points[1], &p1);
-    g3_RotatePoint(&points[2], &p2);
-    g3_RotatePoint(&points[3], &p3);
-
-    const float u0 = static_cast<float>(i) / static_cast<float>(kSegments);
-    const float u1 = static_cast<float>(i + 1) / static_cast<float>(kSegments);
-
-    points[0].p3_flags |= PF_UV;
-    points[1].p3_flags |= PF_UV;
-    points[2].p3_flags |= PF_UV;
-    points[3].p3_flags |= PF_UV;
-
-    points[0].p3_u = u0 * u_max;
-    points[0].p3_v = 0.0f;
-    points[1].p3_u = u1 * u_max;
-    points[1].p3_v = 0.0f;
-    points[2].p3_u = u1 * u_max;
-    points[2].p3_v = v_max;
-    points[3].p3_u = u0 * u_max;
-    points[3].p3_v = v_max;
-
-    g3_DrawPoly(4, point_list, texture_handle);
-  }
+  
+  g3_DrawPoly(4, point_list, texture_handle);
 }
 
 // Helper function to render the 3D cinema screen for one eye
+// Call this ONCE during VR initialization (in VR_Init or similar)
+void VR_InitStereoFrustums() {
+  if (!Vr_system) return;
+  
+  g3StereoFrustum left_frustum, right_frustum;
+  
+  Vr_system->GetProjectionRaw(vr::Eye_Left, &left_frustum.left, &left_frustum.right,
+                               &left_frustum.top, &left_frustum.bottom);
+  Vr_system->GetProjectionRaw(vr::Eye_Right, &right_frustum.left, &right_frustum.right,
+                               &right_frustum.top, &right_frustum.bottom);
+  
+  LOG_INFO.printf("VR: Setting stereo frustums - Left(L=%f,R=%f,T=%f,B=%f) Right(L=%f,R=%f,T=%f,B=%f)",
+                  left_frustum.left, left_frustum.right, left_frustum.top, left_frustum.bottom,
+                  right_frustum.left, right_frustum.right, right_frustum.top, right_frustum.bottom);
+  
+  g3_SetStereoFrustum(&left_frustum, &right_frustum);
+}
+
+// Then in your render function:
 void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_offset, bool is_left_eye) {
   if (!VR_EnsureSubmitSurface(surface)) {
     return;
   }
 
-  if (Vr_menu_fbo_texture == 0) {
+  if (Vr_menu_fbo_texture == 0 || Vr_menu_bitmap < 0) {
     return;
   }
 
-  // Render to window at VR submit resolution
-  StartFrame(0, 0, Vr_submit_width, Vr_submit_height);
+  int render_width = Max_window_w;
+  int render_height = Max_window_h;
+  
+  StartFrame(0, 0, render_width, render_height);
+  rend_ClearScreen(GR_BLACK);
 
-  // Set up 3D view with eye offset for stereo
-//  const vector menu_center_offset{0.5f, -3.5f, 16.0f};
-  const vector menu_center_offset{0.0f, 0.0f, 0.0f};
-  vector view_pos = eye_offset + menu_center_offset;
-  matrix view_orient = Identity_matrix;
+  // Use eye offset as camera position
+  vector camera_pos = eye_offset;
+  matrix camera_orient = Identity_matrix;
+  float zoom = D3_DEFAULT_ZOOM;
   
-  constexpr float kMenuZoom = D3_DEFAULT_ZOOM * 1.35f;
-  constexpr float kConvergenceDistance = 16.0f; // Distance to the cinema screen
+  // Use REGULAR g3_StartFrame - no stereo frustum needed
+  g3_StartFrame(&camera_pos, &camera_orient, zoom);
   
-  // Use stereo rendering only in Stereo mode
-  if (Vr_render_mode == VrRenderMode::Stereo) {
-    g3_StartFrameStereo(&view_pos, &view_orient, kMenuZoom, is_left_eye, Vr_eye_separation, kConvergenceDistance);
-  } else {
-    // Cinema mode: no stereo projection, just regular rendering
-    g3_StartFrame(&view_pos, &view_orient, kMenuZoom);
-  }
-
-  // Calculate UV coords for menu texture
-  const float u_max = Vr_menu_texture_registered
-                          ? 1.0f
-                          : static_cast<float>(Vr_menu_width) / static_cast<float>(Vr_menu_texture_size);
-  const float v_max = Vr_menu_texture_registered
-                          ? 1.0f
-                          : static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
+  float u_max = Vr_menu_texture_registered ? 1.0f : 
+                static_cast<float>(Vr_menu_width) / static_cast<float>(Vr_menu_texture_size);
+  float v_max = Vr_menu_texture_registered ? 1.0f : 
+                static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
   
-  // Draw the curved cinema screen with menu texture
-  constexpr float kArcDegrees = 10.0f;
-  constexpr float kRadius = 20.0f;
-  const float aspect_ratio =
-      (Vr_submit_height > 0) ? static_cast<float>(Vr_submit_width) / static_cast<float>(Vr_submit_height) : 1.0f;
-  const float arc_length = 5;
-  const float target_height = 4;
-  const float clamped_height = std::clamp(target_height, 1.0f, 3.5f);
-  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, kArcDegrees, kRadius, clamped_height);
+  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, 120.0f, 5.0f, 3.0f);
 
   g3_EndFrame();
   EndFrame();
@@ -448,6 +504,7 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
     VR_UpdateSubmitSurface(*screenshot, surface, false);
   }
 }
+
 
 } // namespace
 
@@ -564,29 +621,35 @@ void VR_RenderMenuFrame() {
     return;
   }
 
-  // The menu has already been rendered to Vr_menu_fbo_texture by the game
-  // (via VR_BeginMenuFramebufferRender / VR_EndMenuFramebufferRender)
+  // The menu has already been rendered to Vr_menu_fbo_texture
   
-  // Step 1: Render the curved cinema screen with the menu FBO texture for each eye
+  // Render the curved cinema screen for each eye
   if (Vr_render_mode == VrRenderMode::Stereo) {
-    // Stereo mode: render with eye separation and proper stereo projection
-    const float half_separation = Vr_eye_separation * 0.5f;
-    vector left_eye_offset{-half_separation, 0.0f, 0.0f};
-    vector right_eye_offset{half_separation, 0.0f, 0.0f};
+    // Get the proper eye-to-head transforms from OpenVR
+    auto left_eye_transform = Vr_system->GetEyeToHeadTransform(vr::Eye_Left);
+    auto right_eye_transform = Vr_system->GetEyeToHeadTransform(vr::Eye_Right);
+    
+    // Extract translation from the 3x4 matrix (last column)
+    vector left_eye_offset{left_eye_transform.m[0][3], 
+                          left_eye_transform.m[1][3], 
+                          left_eye_transform.m[2][3]};
+    vector right_eye_offset{right_eye_transform.m[0][3], 
+                           right_eye_transform.m[1][3], 
+                           right_eye_transform.m[2][3]};
 
-    VR_RenderCinemaScreenForEye(Vr_submit_left, left_eye_offset, true);  // true = left eye
-    VR_RenderCinemaScreenForEye(Vr_submit_right, right_eye_offset, false); // false = right eye
+    VR_RenderCinemaScreenForEye(Vr_submit_left, left_eye_offset, true);
+    VR_RenderCinemaScreenForEye(Vr_submit_right, right_eye_offset, false);
   } else {
-    // Cinema mode: both eyes see the same thing (no stereo effect)
-    vector no_offset{0.0f, 0.0f, 0.0f};
-    VR_RenderCinemaScreenForEye(Vr_submit_left, no_offset, true);
-    VR_RenderCinemaScreenForEye(Vr_submit_right, no_offset, false);
+    // Cinema mode: both eyes see the same centered view
+    vector zero_offset{0.0f, 0.0f, 0.0f};
+    VR_RenderCinemaScreenForEye(Vr_submit_left, zero_offset, true);
+    VR_RenderCinemaScreenForEye(Vr_submit_right, zero_offset, false);
   }
 
-  // Step 2: Blit the menu texture to the window so the user can see it on their monitor
+  // Blit the menu texture to the monitor window
   VR_BlitMenuTextureToWindow();
 
-  // Step 3: Submit to OpenVR
+  // Submit to OpenVR
   if (Vr_openvr_ready && vr::VRCompositor()) {
     if (Vr_submit_left.texture != 0 && Vr_submit_right.texture != 0) {
       vr::Texture_t left_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),

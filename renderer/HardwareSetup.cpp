@@ -19,13 +19,14 @@
 #include <cstring>
 
 #include "3d.h"
+#include "log.h"
 #include "HardwareInternal.h"
 #include "renderer.h"
 
 // User-specified aspect ratio, stored as w/h
 static float sAspect = 0.0f;
 static g3StereoFrustum sStereoFrustum[2];
-static bool sStereoFrustumValid = false;
+bool sStereoFrustumValid = false;
 
 // allows the user to specify an aspect ratio that overrides the renderer's
 // The parameter is the w/h of the screen pixels
@@ -149,13 +150,13 @@ void g3_GetStereoProjectionMatrix(float zoom, bool is_left_eye, float eye_separa
   if (sStereoFrustumValid) {
     const g3StereoFrustum &frustum = sStereoFrustum[is_left_eye ? 0 : 1];
 
-    // setup the matrix
     memset(projMat, 0, sizeof(float) * 16);
 
     const float width = frustum.right - frustum.left;
     const float height = frustum.top - frustum.bottom;
     if (width == 0.0f || height == 0.0f) {
-      sStereoFrustumValid = false;
+      // Don't invalidate globally, just fall through to default projection
+      // sStereoFrustumValid = false;  // REMOVE THIS LINE
     } else {
       projMat[0] = 2.0f / width;
       projMat[5] = 2.0f / height;
@@ -166,7 +167,6 @@ void g3_GetStereoProjectionMatrix(float zoom, bool is_left_eye, float eye_separa
       projMat[14] = -1.0f;
       return;
     }
-
   }
 
   // get window size
@@ -214,6 +214,11 @@ void g3_StartFrameStereo(vector *view_pos, matrix *view_matrix, float zoom, bool
   
   // USE STEREO PROJECTION instead of regular
   g3_GetStereoProjectionMatrix(zoom, is_left_eye, eye_separation, convergence_distance, (float *)gTransformProjection);
+
+  LOG_INFO.printf("VR: Eye %s - projMat[0][0]=%f projMat[2][0]=%f sStereoValid=%d",
+          is_left_eye ? "LEFT" : "RIGHT",
+          gTransformProjection[0][0], gTransformProjection[2][0], 
+          sStereoFrustumValid ? 1 : 0);
   
   g3_GetModelViewMatrix(view_pos, view_matrix, (float *)gTransformModelView);
   g3_UpdateFullTransform();
