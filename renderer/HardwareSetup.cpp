@@ -17,7 +17,6 @@
 */
 
 #include <cstring>
-#include <cmath>
 
 #include "3d.h"
 #include "log.h"
@@ -151,25 +150,23 @@ void g3_GetStereoProjectionMatrix(float zoom, bool is_left_eye, float eye_separa
   if (sStereoFrustumValid) {
     const g3StereoFrustum &frustum = sStereoFrustum[is_left_eye ? 0 : 1];
     const g3StereoFrustum &left_frustum = sStereoFrustum[0];
-    const g3StereoFrustum &right_frustum = sStereoFrustum[1];
 
     memset(projMat, 0, sizeof(float) * 16);
 
-    // Keep identical magnification for both eyes.
-    // We still preserve each eye's center offset (projMat[8]/[9]), but use a
-    // shared width/height so one eye cannot end up with a smaller view if the
-    // per-eye raw frustums differ slightly.
-    const float left_width = fabsf(left_frustum.right - left_frustum.left);
-    const float right_width = fabsf(right_frustum.right - right_frustum.left);
-    const float left_height = fabsf(left_frustum.top - left_frustum.bottom);
-    const float right_height = fabsf(right_frustum.top - right_frustum.bottom);
+    // Keep menu magnification locked to a single reference eye (left) and
+    // preserve per-eye frustum center offsets for stereo disparity.
+    // This avoids one eye looking effectively lower-resolution when per-eye
+    // frustum extents are asymmetric.
+    float width = left_frustum.right - left_frustum.left;
+    float height = left_frustum.top - left_frustum.bottom;
 
-    const float width = (left_width + right_width) * 0.5f;
-    const float height = (left_height + right_height) * 0.5f;
+    if (width < 0.0f)
+      width = -width;
+    if (height < 0.0f)
+      height = -height;
 
     if (width == 0.0f || height == 0.0f) {
       // Don't invalidate globally, just fall through to default projection
-      // sStereoFrustumValid = false;  // REMOVE THIS LINE
     } else {
       projMat[0] = 2.0f / width;
       projMat[5] = 2.0f / height;
