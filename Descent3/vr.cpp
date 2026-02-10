@@ -650,15 +650,10 @@ void VR_RenderMenuFrame() {
       vr::Texture_t shared_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
                                       vr::TextureType_OpenGL, vr::ColorSpace_Auto};
 
-      float eye_shift_u = 0.0f;
-      if (Vr_system) {
-        const vector left_eye_offset = VR_GetOpenVREyeOffset(vr::Eye_Left, true);
-        const vector right_eye_offset = VR_GetOpenVREyeOffset(vr::Eye_Right, false);
-        const float half_eye_span = 0.5f * std::fabs(right_eye_offset.x() - left_eye_offset.x());
-        constexpr float kVrMenuDepth = 5.0f;
-        eye_shift_u = std::min(0.1f, half_eye_span / kVrMenuDepth);
-      }
+      const float half_width_pixels = static_cast<float>(Vr_submit_width) * 0.5f;
+      const float eye_shift_u = (Vr_submit_width > 0) ? (half_width_pixels / static_cast<float>(Vr_submit_width)) : 0.0f;
 
+      // Shift right for left eye and left for right eye by half horizontal resolution.
       vr::VRTextureBounds_t left_bounds{-eye_shift_u, 1.0f - eye_shift_u, 0.0f, 1.0f};
       vr::VRTextureBounds_t right_bounds{eye_shift_u, 1.0f + eye_shift_u, 0.0f, 1.0f};
       vr::VRCompositor()->Submit(vr::Eye_Left, &shared_texture, &left_bounds);
