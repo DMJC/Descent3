@@ -345,7 +345,8 @@ void VR_UpdateOpenVRPoses() {
   vr::VRCompositor()->WaitGetPoses(poses, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
 }
 
-void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max, float arc_degrees, float radius, float height) {
+void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max, float arc_degrees, float radius, float height,
+                         const vector &translation) {
   const int num_segments = 32;
   const float arc_radians = arc_degrees * (3.14159265f / 180.0f);
   const float angle_step = arc_radians / num_segments;
@@ -360,8 +361,8 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max, float arc
     float x = sinf(angle) * radius;
     float z = cosf(angle) * radius;
     
-    vector top_pos{x, height / 2.0f, z};
-    vector bottom_pos{x, -height / 2.0f, z};
+    vector top_pos{x + translation.x(), (height / 2.0f) + translation.y(), z + translation.z()};
+    vector bottom_pos{x + translation.x(), (-height / 2.0f) + translation.y(), z + translation.z()};
     
     int top_idx = i * 2;
     int bottom_idx = i * 2 + 1;
@@ -481,8 +482,9 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   StartFrame(0, 0, render_width, render_height);
   rend_ClearScreen(GR_BLACK);
 
-  // Use eye offset as camera position
-  vector camera_pos = eye_offset;
+  // Keep camera centered and translate the curved menu geometry instead.
+  // This avoids stereo doubling on the curved surface.
+  vector camera_pos{0.0f, 0.0f, 0.0f};
   matrix camera_orient = Identity_matrix;
   float zoom = D3_DEFAULT_ZOOM;
   
@@ -494,7 +496,8 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   float v_max = Vr_menu_texture_registered ? 1.0f : 
                 static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
   
-  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, 120.0f, 5.0f, 3.0f);
+  vector menu_translation{-eye_offset.x(), -eye_offset.y(), -eye_offset.z()};
+  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, 120.0f, 5.0f, 3.0f, menu_translation);
 
   g3_EndFrame();
   EndFrame();
@@ -654,8 +657,10 @@ void VR_RenderMenuFrame() {
     if (Vr_submit_left.texture != 0 && Vr_submit_right.texture != 0) {
       vr::Texture_t left_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
                                     vr::TextureType_OpenGL, vr::ColorSpace_Auto};
+      vr::Texture_t right_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_right.texture)),
+                                     vr::TextureType_OpenGL, vr::ColorSpace_Auto};
       vr::VRCompositor()->Submit(vr::Eye_Left, &left_texture);
-      vr::VRCompositor()->Submit(vr::Eye_Right, &left_texture);
+      vr::VRCompositor()->Submit(vr::Eye_Right, &right_texture);
     }
   }
 }
