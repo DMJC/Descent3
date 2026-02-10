@@ -644,12 +644,13 @@ void VR_RenderMenuFrame() {
     auto right_eye_transform = Vr_system->GetEyeToHeadTransform(vr::Eye_Right);
     
     // Extract translation from the 3x4 matrix (last column)
-    vector left_eye_offset{left_eye_transform.m[0][3], 
-                          left_eye_transform.m[1][3], 
-                          left_eye_transform.m[2][3]};
-    vector right_eye_offset{right_eye_transform.m[0][3], 
-                           right_eye_transform.m[1][3], 
-                           right_eye_transform.m[2][3]};
+    // OpenVR returns eye-to-head transforms; invert translation for head-to-eye camera offsets.
+    vector left_eye_offset{-left_eye_transform.m[0][3],
+                           -left_eye_transform.m[1][3],
+                           -left_eye_transform.m[2][3]};
+    vector right_eye_offset{-right_eye_transform.m[0][3],
+                            -right_eye_transform.m[1][3],
+                            -right_eye_transform.m[2][3]};
 
     VR_RenderCinemaScreenForEye(Vr_submit_left, left_eye_offset, true);
     VR_RenderCinemaScreenForEye(Vr_submit_right, right_eye_offset, false);
@@ -668,8 +669,10 @@ void VR_RenderMenuFrame() {
     if (Vr_submit_left.texture != 0 && Vr_submit_right.texture != 0) {
       vr::Texture_t left_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
                                     vr::TextureType_OpenGL, vr::ColorSpace_Auto};
+      vr::Texture_t right_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_right.texture)),
+                                     vr::TextureType_OpenGL, vr::ColorSpace_Auto};
       vr::VRCompositor()->Submit(vr::Eye_Left, &left_texture);
-      vr::VRCompositor()->Submit(vr::Eye_Right, &left_texture);
+      vr::VRCompositor()->Submit(vr::Eye_Right, &right_texture);
     }
   }
 }
