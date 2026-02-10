@@ -17,6 +17,7 @@
 */
 
 #include <cstring>
+#include <cmath>
 
 #include "3d.h"
 #include "log.h"
@@ -111,12 +112,32 @@ void g3_StartFrame(vector *view_pos, matrix *view_matrix, float zoom) {
   LOG_INFO.printf("VR-MENU-TRACE: g3_StartFrame zoom=%f view_pos=(%f,%f,%f)", zoom, view_pos->x(), view_pos->y(),
                   view_pos->z());
   g3_GetViewPortMatrix((float *)gTransformViewPort);
-  g3_GetProjectionMatrix(zoom, (float *)gTransformProjection);
   if (sStereoFrustumValid) {
-    LOG_INFO.printf("VR-MENU-TRACE: g3_StartFrame stereo-frustum-active L(l=%f r=%f t=%f b=%f) R(l=%f r=%f t=%f b=%f)",
-                    sStereoFrustum[0].left, sStereoFrustum[0].right, sStereoFrustum[0].top, sStereoFrustum[0].bottom,
-                    sStereoFrustum[1].left, sStereoFrustum[1].right, sStereoFrustum[1].top, sStereoFrustum[1].bottom);
-    LOG_INFO << "VR-MENU-TRACE: g3_StartFrame using mono g3_GetProjectionMatrix while stereo frusta are active";
+    const float left_center = (sStereoFrustum[0].left + sStereoFrustum[0].right) * 0.5f;
+    const float right_center = (sStereoFrustum[1].left + sStereoFrustum[1].right) * 0.5f;
+
+    // Choose the stereo frustum that best matches the current eye position so
+    // g3_StartFrame does not silently fall back to mono projection while
+    // stereo frustums are active.
+    bool use_left_slot = true;
+    if (fabsf(left_center - right_center) > 0.00001f) {
+      if (view_pos->x() < 0.0f) {
+        use_left_slot = left_center < right_center;
+      } else if (view_pos->x() > 0.0f) {
+        use_left_slot = left_center > right_center;
+      } else {
+        use_left_slot = fabsf(left_center) <= fabsf(right_center);
+      }
+    }
+
+    LOG_INFO.printf(
+        "VR-MENU-TRACE: g3_StartFrame stereo-frustum-active eye_pos_x=%f L(l=%f r=%f c=%f) R(l=%f r=%f c=%f) choose=%s",
+        view_pos->x(), sStereoFrustum[0].left, sStereoFrustum[0].right, left_center, sStereoFrustum[1].left,
+        sStereoFrustum[1].right, right_center, use_left_slot ? "LEFT_SLOT" : "RIGHT_SLOT");
+
+    g3_GetStereoProjectionMatrix(zoom, use_left_slot, 0.0f, 0.0f, (float *)gTransformProjection);
+  } else {
+    g3_GetProjectionMatrix(zoom, (float *)gTransformProjection);
   }
   g3_GetModelViewMatrix(view_pos, view_matrix, (float *)gTransformModelView);
   g3_UpdateFullTransform();
