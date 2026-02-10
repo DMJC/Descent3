@@ -638,26 +638,27 @@ void VR_RenderMenuFrame() {
   // The menu has already been rendered to Vr_menu_fbo_texture
   
   // Render a single curved cinema screen texture shared by both eyes.
-  VR_RenderCinemaScreenForEye(Vr_submit_left, 0.0f);
+  // Compute convergence-center X and apply the same translation for both eyes.
+  float menu_horizontal_offset = 0.0f;
+  if (Vr_system) {
+    const vector left_eye_offset = VR_GetOpenVREyeOffset(vr::Eye_Left, true);
+    const vector right_eye_offset = VR_GetOpenVREyeOffset(vr::Eye_Right, false);
+    menu_horizontal_offset = -0.5f * (left_eye_offset.x() + right_eye_offset.x());
+  }
+
+  VR_RenderCinemaScreenForEye(Vr_submit_left, menu_horizontal_offset);
 
   // Blit the menu texture to the monitor window
   VR_BlitMenuTextureToWindow();
 
-  // Submit to OpenVR with opposite per-eye horizontal shifts to remove menu
-  // stereo doubling while still using one shared texture.
+  // Submit the same shared menu texture to both eyes. The convergence-based
+  // translation is already baked into the rendered curved polygon.
   if (Vr_openvr_ready && vr::VRCompositor()) {
     if (Vr_submit_left.texture != 0) {
       vr::Texture_t shared_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
                                       vr::TextureType_OpenGL, vr::ColorSpace_Auto};
-
-      const float half_width_pixels = static_cast<float>(Vr_submit_width) * 0.5f;
-      const float eye_shift_u = (Vr_submit_width > 0) ? (half_width_pixels / static_cast<float>(Vr_submit_width)) : 0.0f;
-
-      // Shift right for left eye and left for right eye by half horizontal resolution.
-      vr::VRTextureBounds_t left_bounds{-eye_shift_u, 1.0f - eye_shift_u, 0.0f, 1.0f};
-      vr::VRTextureBounds_t right_bounds{eye_shift_u, 1.0f + eye_shift_u, 0.0f, 1.0f};
-      vr::VRCompositor()->Submit(vr::Eye_Left, &shared_texture, &left_bounds);
-      vr::VRCompositor()->Submit(vr::Eye_Right, &shared_texture, &right_bounds);
+      vr::VRCompositor()->Submit(vr::Eye_Left, &shared_texture);
+      vr::VRCompositor()->Submit(vr::Eye_Right, &shared_texture);
     }
   }
 }
