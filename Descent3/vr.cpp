@@ -468,7 +468,9 @@ void VR_InitStereoFrustums() {
 vector VR_GetOpenVREyeOffset(vr::Hmd_Eye eye, bool is_left_eye) {
   if (Vr_system) {
     const auto eye_transform = Vr_system->GetEyeToHeadTransform(eye);
-    return vector{eye_transform.m[0][3], eye_transform.m[1][3], eye_transform.m[2][3]};
+    // OpenVR returns an eye->head transform. We render from head space, so we
+    // need the inverse translation component (head->eye) for camera placement.
+    return vector{-eye_transform.m[0][3], -eye_transform.m[1][3], -eye_transform.m[2][3]};
   }
 
   const float eye_sign = is_left_eye ? -1.0f : 1.0f;
