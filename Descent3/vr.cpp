@@ -486,13 +486,9 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   matrix camera_orient = Identity_matrix;
   float zoom = D3_DEFAULT_ZOOM;
   
-  if (VR_IsStereoRendering()) {
-    constexpr float kVrMenuConvergenceDistance = 30.0f;
-    g3_StartFrameStereo(&camera_pos, &camera_orient, zoom, is_left_eye, VR_GetStereoEyeSeparation(),
-                        kVrMenuConvergenceDistance);
-  } else {
-    g3_StartFrame(&camera_pos, &camera_orient, zoom);
-  }
+  // Menu cinema rendering uses per-eye camera offsets; keep projection symmetric to avoid
+  // introducing per-eye frustum scaling differences.
+  g3_StartFrame(&camera_pos, &camera_orient, zoom);
   
   float u_max = Vr_menu_texture_registered ? 1.0f : 
                 static_cast<float>(Vr_menu_width) / static_cast<float>(Vr_menu_texture_size);
@@ -578,10 +574,8 @@ void VR_InitFromCommandLine() {
     Vr_system->GetProjectionRaw(vr::Eye_Left, &left_l, &left_r, &left_t, &left_b);
     Vr_system->GetProjectionRaw(vr::Eye_Right, &right_l, &right_r, &right_t, &right_b);
 
-    const float common_t = (left_t + right_t) * 0.5f;
-    const float common_b = (left_b + right_b) * 0.5f;
-    g3StereoFrustum left_frustum{left_l, left_r, -common_t, -common_b};
-    g3StereoFrustum right_frustum{right_l, right_r, -common_t, -common_b};
+    g3StereoFrustum left_frustum{left_l, left_r, -left_t, -left_b};
+    g3StereoFrustum right_frustum{right_l, right_r, -right_t, -right_b};
     g3_SetStereoFrustum(&right_frustum, &left_frustum);
   }
 
