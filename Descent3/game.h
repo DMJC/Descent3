@@ -222,6 +222,9 @@ void EndFrame();
 // returns false if it's not currently in between a StartFrame/EndFrame block
 bool GetFrameParameters(int *x1, int *y1, int *x2, int *y2);
 
+// Returns per-eye HUD convergence horizontal offset in pixels for stereo VR rendering.
+int GetHUDConvergenceOffsetPixels();
+
 //	call this to set the game mode
 void SetGameMode(int mode);
 

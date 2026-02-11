@@ -798,6 +798,7 @@
  * $NoKeywords: $
  */
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -2492,6 +2493,28 @@ void GameRenderWorld(object *viewer, vector *viewer_eye, int viewer_roomnum, mat
 // Added by Samir
 #define HUD_RENDER_ZOOM 0.56f
 
+static int HUD_convergence_offset_pixels = 0;
+
+int GetHUDConvergenceOffsetPixels() { return HUD_convergence_offset_pixels; }
+
+static int CalculateHUDConvergenceOffsetPixels(bool is_left_eye, float eye_separation, float convergence_distance) {
+  if (eye_separation == 0.0f || convergence_distance <= 0.0f || Game_window_h <= 0)
+    return 0;
+
+  const float eye_offset = is_left_eye ? -eye_separation * 0.5f : eye_separation * 0.5f;
+  const float frustum_shift = -eye_offset / convergence_distance;
+
+  const float aspect = (float)Game_window_w / (float)Game_window_h;
+  const float vertical_fov = HUD_RENDER_ZOOM * 0.75f;
+  const float oOT = (vertical_fov != 0.0f) ? (1.0f / vertical_fov) : 0.0f;
+  const float proj0 = (aspect <= 1.0f) ? oOT : (oOT / aspect);
+  const float proj8 = frustum_shift * proj0;
+
+  // Convert projection matrix horizontal translation into a HUD-space counter-shift.
+  // Sign is inverted because proj8 already shifts projected positions on screen.
+  return (int)std::lround(-proj8 * ((float)Game_window_w * 0.5f));
+}
+
 // Render into the big window
 void GameDrawMainView() {
   extern bool Guided_missile_smallview; // smallviews.cpp
@@ -2509,6 +2532,7 @@ void GameDrawMainView() {
 
   // Draw the world
   Rendering_main_view = true;
+  HUD_convergence_offset_pixels = 0;
   if (VR_IsEnabled() && VR_IsStereoRendering()) {
     matrix view_orient = Viewer_object->orient;
     matrix saved_orient;
@@ -2534,6 +2558,8 @@ void GameDrawMainView() {
       DoMatcensRenderFrame();
       ProcessRenderEvents();
       if (!HUD_disabled) {
+        HUD_convergence_offset_pixels =
+            CalculateHUDConvergenceOffsetPixels(is_left_eye, VR_GetStereoEyeSeparation(), kVrConvergenceDistance);
         g3_StartFrameStereo(&eye_pos, &view_orient, HUD_RENDER_ZOOM, is_left_eye, VR_GetStereoEyeSeparation(),
                             kVrConvergenceDistance);
         RenderHUDFrame();
@@ -2552,6 +2578,7 @@ void GameDrawMainView() {
     if (left && right) {
       VR_SubmitStereoFrame(*left, *right);
     }
+    HUD_convergence_offset_pixels = 0;
     DoRoomChangeFrame();
   } else {
     // Start rendering
@@ -2573,6 +2600,8 @@ void GameDrawMainView() {
 
 // Do Cockpit/Hud
 void GameDrawHud() {
+  HUD_convergence_offset_pixels = 0;
+
   //	Start frame and 3d frame
   StartFrame(false);
   g3_StartFrame(&Viewer_object->pos, &Viewer_object->orient, HUD_RENDER_ZOOM);
