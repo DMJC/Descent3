@@ -204,8 +204,6 @@
 #include "room.h"
 #include "hlsoundlib.h"
 #include "sounds.h"
-#include "3d.h"
-#include "vr.h"
 
 #define COCKPIT_ANIM_TIME 2.0f
 #define COCKPIT_DORMANT_FRAME 0.0
@@ -247,15 +245,6 @@ struct tCockpitInfo {
 
 static tCockpitInfo Cockpit_info;
 static float KeyframeAnimateCockpit();
-
-static float GetStereoCockpitCounterShift(float view_depth) {
-  if (!VR_IsStereoRendering() || view_depth == 0.0f || gTransformProjection[0][0] == 0.0f) {
-    return 0.0f;
-  }
-
-  return (-gTransformProjection[2][0] * view_depth) / gTransformProjection[0][0];
-}
-
 //	loads cockpit. model_name = NULL, then will not load in model name.
 static void LoadCockpitInfo(const char *ckt_file, tCockpitCfgInfo *info);
 //////////////////////////////////////////////////////////////////////////////
@@ -475,7 +464,6 @@ void RenderCockpit() {
   view_z = viewer_subobj->offset.z() - Cockpit_info.buffet_vec.z() * Cockpit_info.buffet_amp * Cockpit_info.buffet_wave * 1.1f;
   view_y = viewer_subobj->offset.y() + Cockpit_info.buffet_vec.y() * Cockpit_info.buffet_amp * Cockpit_info.buffet_wave;
   view_x = viewer_subobj->offset.x() + Cockpit_info.buffet_vec.x() * Cockpit_info.buffet_amp * Cockpit_info.buffet_wave;
-  view_x += GetStereoCockpitCounterShift(view_z);
   //@@	if (player_phys->rotthrust.x !=0.0f || player_phys->rotthrust.y != 0.0f) {
   //@@		gauge_reset = true;
   //@@		view_x += (player_phys->rotthrust.y*COCKPIT_SHIFT_DELTA/player_phys->full_rotthrust);

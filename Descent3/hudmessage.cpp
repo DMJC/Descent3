@@ -351,6 +351,7 @@
 #include "hlsoundlib.h"
 #include "args.h"
 #include "pserror.h"
+#include "vr.h"
 
 #define HUD_MESSAGE_NORMAL 0
 #define HUD_MESSAGE_BLINKING 1
@@ -410,7 +411,14 @@ static void CorrectHudMessage(char *str);
 
 ///////////////////////////////////////////////////////////////////////////////
 //	Functions
+// VR Offset Calculator
+static int GetStereoProjectionCounterShiftPixels(int reference_width) {
+  if (!VR_IsStereoRendering() || reference_width <= 0) {
+    return 0;
+  }
 
+  return static_cast<int>(std::lround(-gTransformProjection[2][0] * (static_cast<float>(reference_width) * 0.5f)));
+}
 //	prints a string onto the debug consle
 static void AddMessageToRollback(char *msg) { HUD_msg_list.add(msg); }
 
@@ -1013,7 +1021,9 @@ void DoHUDInputMessageKey(int key) {
 void RenderHUDInputMessage() {
   char message[255];
   int y, x, lw;
-
+  int cx = 0;
+  cx -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
+  
   ddgr_color text_color = HUD_COLOR;
   grtext_SetColor(text_color);
 
@@ -1038,7 +1048,7 @@ void RenderHUDInputMessage() {
   } else {
     y = (Game_window_h * 3 / 5) + Game_window_y;
   }
-  grtext_Puts(x, y, message);
+  grtext_Puts(x + cx, y, message);
 }
 
 int testcolor = 200;
@@ -1073,7 +1083,8 @@ void RenderScrollingHUDMessages() {
   int text_height;
   int16_t l, t, r, b;
   int i;
-
+  int cx = 0;
+  cx -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
   // Check for wraps
   if (Gametime < Hud_timer)
     Hud_timer = Gametime;
@@ -1142,7 +1153,7 @@ void RenderScrollingHUDMessages() {
     } else {
       x = (Game_window_w - text_width) / 2;
     }
-    grtext_Puts(x, y, message);
+    grtext_Puts(x + cx, y, message);
   }
   if (Small_hud_flag && (i > 0)) {
     HUD_msg_dirty_rect.set(l, t, r, b);
@@ -1190,7 +1201,8 @@ void RenderScrollingHUDMessages() {
 void RenderHUDMessages() {
   if (Hud_messages_paused)
     return;
-
+  int cx = 0;
+  cx -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
   // Render & update the scrolling message list
   RenderScrollingHUDMessages();
 
@@ -1211,7 +1223,7 @@ void RenderHUDMessages() {
 
       if (item && Small_hud_flag) {
         grtext_SetFont(HUD_FONT);
-        int16_t l = item->x * Max_window_w / DEFAULT_HUD_WIDTH;
+        int16_t l = item->x * Max_window_w / DEFAULT_HUD_WIDTH + cx;
         int16_t t = item->y * Max_window_h / DEFAULT_HUD_HEIGHT;
         int16_t r = l + grtext_GetTextLineWidth(item->data.text) + 10;
         int16_t b = t + grtext_GetTextHeight(item->data.text);
@@ -1238,7 +1250,7 @@ void RenderHUDMessages() {
           } else { // dp next char
             item2->data.text[0] = item->data.text[Hud_persistent_msg_current_len];
             item->data.text[Hud_persistent_msg_current_len] = 0;
-            item2->x = item->x + RenderHUDGetTextLineWidth(item->data.text);
+            item2->x = item->x + cx + RenderHUDGetTextLineWidth(item->data.text);
             Hud_persistent_msg_char_timer += CHAR_DELAY;
           }
         }
@@ -1301,11 +1313,12 @@ int Num_queued_PHUD_messages = 0;
 void QueuePersistentHUDMessage(ddgr_color color, int x, int y, float time, int flags, int sound_index, char *message) {
   if (Num_queued_PHUD_messages == PHUD_QUEUE_SIZE)
     return;
-
+  int cx = 0;
+  cx -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
   phud_message *pp = &PHUD_message_queue[Num_queued_PHUD_messages++];
 
   pp->color = color;
-  pp->x = x;
+  pp->x = x + cx;
   pp->y = y;
   pp->time = time;
   pp->flags = flags;
@@ -1315,8 +1328,10 @@ void QueuePersistentHUDMessage(ddgr_color color, int x, int y, float time, int f
 
 // Start playing a persistent HUD message
 void StartPersistentHUDMessage(ddgr_color color, int x, int y, float time, int flags, int sound_index, char *message) {
+  int cx = 0;
+  cx -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
   if (Demo_flags == DF_RECORDING) {
-    DemoWritePersistantHUDMessage(color, x, y, time, flags, sound_index, message);
+    DemoWritePersistantHUDMessage(color, x + cx, y, time, flags, sound_index, message);
   }
 
   // set x and y if special formatting.
@@ -1336,7 +1351,7 @@ void StartPersistentHUDMessage(ddgr_color color, int x, int y, float time, int f
   huditem.alpha = HUD_ALPHA;
   huditem.color = color;
   huditem.type = HUD_ITEM_CUSTOMTEXT;
-  huditem.x = x * DEFAULT_HUD_WIDTH / Max_window_w;
+  huditem.x = x * DEFAULT_HUD_WIDTH / Max_window_w + cx;
   huditem.y = y * DEFAULT_HUD_HEIGHT / Max_window_h;
   huditem.data.text = message;
   huditem.stat = STAT_MESSAGES;
@@ -1380,20 +1395,23 @@ void AddPersistentHUDMessage(ddgr_color color, int x, int y, float time, int fla
                              ...) {
   std::va_list args;
   char temp_message[HUD_MESSAGE_LENGTH * 2];
-
+  int cx = 0;
+  cx -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
   // start new message
   va_start(args, fmt);
   std::vsnprintf(temp_message, HUD_MESSAGE_LENGTH * 2, fmt, args);
   va_end(args);
 
   if (Hud_persistent_msg_id != HUD_INVALID_ID) // already one active, so queue the new one
-    QueuePersistentHUDMessage(color, x, y, time, flags, sound_index, temp_message);
+    QueuePersistentHUDMessage(color, x + cx, y, time, flags, sound_index, temp_message);
   else
-    StartPersistentHUDMessage(color, x, y, time, flags, sound_index, temp_message);
+    StartPersistentHUDMessage(color, x + cx, y, time, flags, sound_index, temp_message);
 }
 
 // Clears the current message, and plays the next in the queue
 void ClearPersistentHUDMessage() {
+  int cx = 0;
+  cx -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
   // free persistent message currently visible
   if (Hud_persistent_msg_id != HUD_INVALID_ID) {
     tHUDItem *item = GetHUDItem(Hud_persistent_msg_id);
@@ -1422,7 +1440,7 @@ void ClearPersistentHUDMessage() {
   // Check for queued message
   if (Num_queued_PHUD_messages) {
     phud_message *pp = &PHUD_message_queue[0];
-    StartPersistentHUDMessage(pp->color, pp->x, pp->y, pp->time, pp->flags, pp->sound_index, pp->message);
+    StartPersistentHUDMessage(pp->color, pp->x+ cx, pp->y, pp->time, pp->flags, pp->sound_index, pp->message);
     *pp = PHUD_message_queue[1];
     Num_queued_PHUD_messages--;
   }
@@ -1701,7 +1719,8 @@ void MsgListConsole::AttachMsgList(tMsgList *msglist) {
 void MsgListConsole::Draw() {
   g3Point *pntlist[4], points[4];
   int y, i;
-
+  int cx = 0;
+  cx -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
   if (!m_opened || !m_list)
     return;
 
@@ -1743,7 +1762,7 @@ void MsgListConsole::Draw() {
                        m_y + m_h - MSGL_BORDER_THICKNESS);
   grtext_SetFont(HUD_FONT);
   grtext_SetColor(GR_RGB(0, 255, 0));
-  grtext_Puts(m_x + MSGL_BORDER_THICKNESS + 4, m_y + MSGL_BORDER_THICKNESS - 1, m_title);
+  grtext_Puts(m_x + MSGL_BORDER_THICKNESS + 4 + cx, m_y + MSGL_BORDER_THICKNESS - 1, m_title);
 
   y = m_y + grfont_GetHeight(HUD_FONT) + MSGL_BORDER_THICKNESS + 1;
   rend_SetFlatColor(GR_RGB(0, 255, 0));

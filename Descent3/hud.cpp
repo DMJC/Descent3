@@ -2005,6 +2005,7 @@ static inline void draw_reticle_sub(int cx, int cy, int rw, int rh, uint16_t on_
   }
 }
 
+
 //	renders the reticle
 void RenderReticle() {
   static uint16_t primary_index_last_frame = 0xffff;
@@ -2025,7 +2026,7 @@ void RenderReticle() {
   int rw = RET_IMAGE_WIDTH;
   int rh = RET_IMAGE_HEIGHT;
 
-  cx += GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
+  cx -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
 
   //	quad weapon check hack (any weapon states that change should be noted here.)
   if (prim_dyn_wb->flags & DWBF_QUAD) {
@@ -2060,7 +2061,7 @@ void RenderMissileReticle() {
   int cy = Game_window_h / 2;
   int counter_shift = GetStereoProjectionCounterShiftPixels(Game_window_w);
 
-  cx += counter_shift;
+  cx -= counter_shift;
 
   RenderHUDTextFlags(0, GR_RED, HUD_ALPHA, 0, (Game_window_w / 2) - (RenderHUDGetTextLineWidth(TXT_HUD_GUIDED) / 2) + counter_shift,
                      cy - 50, TXT_HUD_GUIDED);
@@ -2083,7 +2084,7 @@ void RenderZoomReticle() {
   int counter_shift = GetStereoProjectionCounterShiftPixels(Game_window_w);
   char str[255];
 
-  cx += counter_shift;
+  cx -= counter_shift;
 
   RenderHUDTextFlags(0, GR_RED, HUD_ALPHA, 0, (Game_window_w / 2) - (RenderHUDGetTextLineWidth(TXT_HUD_ZOOM) / 2) + counter_shift,
                      cy - 50, TXT_HUD_ZOOM);
