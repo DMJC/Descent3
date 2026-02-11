@@ -237,6 +237,8 @@
 #include "config.h"
 #include "multi.h"
 #include "render.h"
+#include "3d.h"
+#include "vr.h"
 
 #include <algorithm>
 
@@ -283,6 +285,14 @@ static inline int get_weapon_icon(int player, int type) {
   }
 
   return HUD_resources.wpn_bmp;
+}
+
+static int GetStereoProjectionCounterShiftPixels(int reference_width) {
+  if (!VR_IsStereoRendering() || reference_width <= 0) {
+    return 0;
+  }
+
+  return static_cast<int>(std::lround(-gTransformProjection[2][0] * (static_cast<float>(reference_width) * 0.5f)));
 }
 
 static void RenderHUDTextFlagsNoFormat(int flags, ddgr_color col, uint8_t alpha, int sat_count, int x, int y, const char *str);
@@ -361,7 +371,8 @@ void RenderHUDInventory(tHUDItem *item) {
   int count = Players[Player_num].inventory.GetInventoryItemList(ilist, MAX_UNIQUE_INVEN_ITEMS, &cur_sel);
   if (!count)
     return;
-
+  int cx = 0;
+  cx -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
   int y;
   float img_w = 0;
 
@@ -376,10 +387,10 @@ void RenderHUDInventory(tHUDItem *item) {
                     HUD_resources.arrow_bmp, item->alpha, item->saturation_count);
 
       if (ilist[cur_sel].amount > 1)
-        RenderHUDText(item->color, item->alpha, item->saturation_count, item->x + img_w, item->y, "%s (%d)",
+        RenderHUDText(item->color, item->alpha, item->saturation_count, item->x + img_w + cx, item->y, "%s (%d)",
                       ilist[cur_sel].hud_name, ilist[cur_sel].amount);
       else
-        RenderHUDText(item->color, item->alpha, item->saturation_count, item->x + img_w, item->y, "%s",
+        RenderHUDText(item->color, item->alpha, item->saturation_count, item->x + img_w + cx, item->y, "%s",
                       ilist[cur_sel].hud_name);
     }
   }
@@ -471,7 +482,8 @@ void RenderHUDShieldValue(tHUDItem *item) {
   const int SHIELD_IMG_X = 21, SHIELD_IMG_Y = 57;
   const int WARNING_IMG_X = 110, WARNING_IMG_Y = 8;
   float alpha_mod = (Objects[Players[Player_num].objnum].shields) / (float)INITIAL_SHIELDS;
-
+  int cx = 0;
+  cx -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
   if (alpha_mod > 1.0f)
     alpha_mod = 1.0f;
 
@@ -498,7 +510,7 @@ void RenderHUDShieldValue(tHUDItem *item) {
                     0, 1, 1, img, item->alpha, item->saturation_count);
     }
   } else if (item->stat & STAT_SPECIAL) {
-    RenderHUDText(item->color, item->alpha, item->saturation_count, item->x, item->y, "%03d",
+    RenderHUDText(item->color, item->alpha, item->saturation_count, item->x + cx, item->y, "%03d",
                   (int)Objects[Players[Player_num].objnum].shields);
 
     if (alpha_mod <= 0.20f) {
@@ -508,14 +520,15 @@ void RenderHUDShieldValue(tHUDItem *item) {
   } else {
     // TEXT VERSION
     RenderHUDText(item->tcolor, item->alpha, (alpha_mod <= .20f) ? item->saturation_count + 1 : item->saturation_count,
-                  item->tx, item->ty, "%s: %03d", TXT_HUD_SHIELDS, (int)Objects[Players[Player_num].objnum].shields);
+                  item->tx + cx, item->ty, "%s: %03d", TXT_HUD_SHIELDS, (int)Objects[Players[Player_num].objnum].shields);
   }
 }
 
 // renders the energy rating for the ship
 void RenderHUDEnergyValue(tHUDItem *item) {
   float normalized_energy = (float)Players[Player_num].energy / (float)INITIAL_ENERGY;
-
+  int cx = 0;
+  cx -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
   // cap off energy to 1.0 normalized
   if (normalized_energy > 1.0f)
     normalized_energy = 1.0f;
@@ -556,7 +569,7 @@ void RenderHUDEnergyValue(tHUDItem *item) {
     RenderHUDQuad(item->x + item->xb - img_w, item->y + item->yb + (int)(img_h - img_energy_h), img_w, img_energy_h, 1,
                   1.0f - normalized_energy, 0, 1, HUD_resources.energy_bmp, item->alpha, item->saturation_count);
   } else if (item->stat & STAT_SPECIAL) {
-    RenderHUDText(item->color, item->alpha, item->saturation_count, item->x, item->y, "%03d",
+    RenderHUDText(item->color, item->alpha, item->saturation_count, item->x + cx, item->y, "%03d",
                   (int)Players[Player_num].energy);
 
     if (normalized_energy <= 0.20f) {
@@ -566,7 +579,7 @@ void RenderHUDEnergyValue(tHUDItem *item) {
   } else {
     // TEXT VERSION
     RenderHUDText(item->tcolor, item->alpha,
-                  (normalized_energy <= .20f) ? item->saturation_count + 1 : item->saturation_count, item->tx, item->ty,
+                  (normalized_energy <= .20f) ? item->saturation_count + 1 : item->saturation_count, item->tx + cx, item->ty,
                   "%s: %03d", TXT_HUD_ENERGY, (int)Players[Player_num].energy);
   }
 }
@@ -575,7 +588,9 @@ void RenderHUDEnergyValue(tHUDItem *item) {
 void RenderHUDAfterburner(tHUDItem *item) {
   float val = (Players[Player_num].afterburn_time_left / AFTERBURN_TIME);
   char str[8];
-
+  int cx = 0;
+  cx -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
+  
   if (item->stat & STAT_GRAPHICAL) {
     const int BURNER_NUM_X = 24;
     float grscalex = (item->grscalex != 0.0f) ? item->grscalex : HUD_BURN_SCALE;
@@ -593,14 +608,14 @@ void RenderHUDAfterburner(tHUDItem *item) {
                   item->alpha, item->saturation_count);
 
     snprintf(str, sizeof(str), "%d%%", (int)(val * 100.0f));
-    RenderHUDText(item->color, item->alpha, item->saturation_count, item->x + BURNER_NUM_X, item->y, str);
+    RenderHUDText(item->color, item->alpha, item->saturation_count, item->x + BURNER_NUM_X +cx, item->y, str);
   } else if (item->stat & STAT_SPECIAL) {
     snprintf(str, sizeof(str), "%d%%", (int)(val * 100.0f));
-    RenderHUDText(item->color, item->alpha, item->saturation_count, item->x, item->y, str);
+    RenderHUDText(item->color, item->alpha, item->saturation_count, item->x + cx, item->y, str);
   } else {
     // TEXT VERSION
     RenderHUDText(item->tcolor, item->alpha, (val <= .30f) ? item->saturation_count + 1 : item->saturation_count,
-                  item->tx, item->ty, "%s: %d%%", TXT_HUD_AFTERBURNER, (int)(val * 100.0f));
+                  item->tx + cx, item->ty, "%s: %d%%", TXT_HUD_AFTERBURNER, (int)(val * 100.0f));
   }
 }
 
@@ -801,6 +816,8 @@ void RenderHUDCountermeasures(tHUDItem *item) {
   tInvenList ilist[MAX_UNIQUE_INVEN_ITEMS];
   int cur_sel;
   int count = Players[Player_num].counter_measures.GetInventoryItemList(ilist, MAX_UNIQUE_INVEN_ITEMS, &cur_sel);
+  int cx = 0;
+  cx -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
   if (!count)
     return;
 
@@ -810,10 +827,10 @@ void RenderHUDCountermeasures(tHUDItem *item) {
     // render currently selected item
     if (ilist[cur_sel].hud_name) {
       if (item->stat & STAT_GRAPHICAL)
-        RenderHUDText(item->color, item->alpha, item->saturation_count, item->x, item->y, "%s %d",
+        RenderHUDText(item->color, item->alpha, item->saturation_count, item->x + cx, item->y, "%s %d",
                       ilist[cur_sel].hud_name, ilist[cur_sel].amount);
       else
-        RenderHUDText(item->color, item->alpha, item->saturation_count, item->tx, item->ty, "%s %d",
+        RenderHUDText(item->color, item->alpha, item->saturation_count, item->tx + cx, item->ty, "%s %d",
                       ilist[cur_sel].hud_name, ilist[cur_sel].amount);
     }
   }

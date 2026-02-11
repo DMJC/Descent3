@@ -92,6 +92,14 @@ struct VrGlFns {
   CheckFramebufferStatusFn check_framebuffer_status = nullptr;
 };
 
+static int GetStereoProjectionCounterShiftPixels(int reference_width) {
+  if (!VR_IsStereoRendering() || reference_width <= 0) {
+    return 0;
+  }
+
+  return static_cast<int>(std::lround(-gTransformProjection[2][0] * (static_cast<float>(reference_width) * 0.5f)));
+}
+
 VrGlFns &VR_GetGlFns() {
   static VrGlFns fns;
   if (fns.loaded) {
@@ -345,7 +353,7 @@ void VR_UpdateOpenVRPoses() {
   vr::VRCompositor()->WaitGetPoses(poses, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
 }
 
-void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max, float arc_degrees, float radius, float height) {
+void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max, float arc_degrees, float radius, float height, float x_shift = 0.0f) {
   const int num_segments = 32;
   const float arc_radians = arc_degrees * (3.14159265f / 180.0f);
   const float angle_step = arc_radians / num_segments;
@@ -360,8 +368,9 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max, float arc
     float x = sinf(angle) * radius;
     float z = cosf(angle) * radius;
     
-    vector top_pos{x, height / 2.0f, z};
-    vector bottom_pos{x, -height / 2.0f, z};
+    // APPLY THE SHIFT TO THE GEOMETRY
+    vector top_pos{x + x_shift, height / 2.0f, z};
+    vector bottom_pos{x + x_shift, -height / 2.0f, z};
     
     int top_idx = i * 2;
     int bottom_idx = i * 2 + 1;
@@ -373,11 +382,10 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max, float arc
     points[bottom_idx].p3_flags |= PF_UV;
     
     float u = (float)i / num_segments * u_max;
-    // FLIP V: top gets v_max, bottom gets 0
     points[top_idx].p3_u = u;
-    points[top_idx].p3_v = v_max;  // Changed from 0.0f
+    points[top_idx].p3_v = v_max;
     points[bottom_idx].p3_u = u;
-    points[bottom_idx].p3_v = 0.0f;  // Changed from v_max
+    points[bottom_idx].p3_v = 0.0f;
     
     top_strip[i] = &points[top_idx];
     bottom_strip[i] = &points[bottom_idx];
@@ -481,12 +489,17 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   StartFrame(0, 0, render_width, render_height);
   rend_ClearScreen(GR_BLACK);
 
-  // Use eye offset as camera position
+  // Convert pixel shift to world space offset
+  const float screen_distance = 5.0f;
+  const float screen_width_world = 6.0f; // Approximate width of cinema screen arc
+  float world_shift = 0.0f;
+  world_shift -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
+  
+  // Camera stays at its proper eye offset position
   vector camera_pos = eye_offset;
   matrix camera_orient = Identity_matrix;
   float zoom = D3_DEFAULT_ZOOM;
   
-  // Use REGULAR g3_StartFrame - no stereo frustum needed
   g3_StartFrame(&camera_pos, &camera_orient, zoom);
   
   float u_max = Vr_menu_texture_registered ? 1.0f : 
@@ -494,7 +507,8 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   float v_max = Vr_menu_texture_registered ? 1.0f : 
                 static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
   
-  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, 120.0f, 5.0f, 3.0f);
+  // MOVE THE GEOMETRY by applying world_shift
+  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, 120.0f, 5.0f, 3.0f, -world_shift);
 
   g3_EndFrame();
   EndFrame();
@@ -636,7 +650,8 @@ void VR_RenderMenuFrame() {
     vector right_eye_offset{right_eye_transform.m[0][3], 
                            right_eye_transform.m[1][3], 
                            right_eye_transform.m[2][3]};
-
+    int cx = 0;
+    cx -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
     VR_RenderCinemaScreenForEye(Vr_submit_left, left_eye_offset, true);
     VR_RenderCinemaScreenForEye(Vr_submit_right, right_eye_offset, false);
   } else {

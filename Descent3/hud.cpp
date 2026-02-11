@@ -413,6 +413,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 
 #include "hud.h"
 #include "grdefs.h"
@@ -437,6 +438,8 @@
 #include "gamecinematics.h"
 #include "CtlCfgElem.h"
 #include "ctlconfig.h"
+#include "3d.h"
+#include "vr.h"
 
 //////////////////////////////////////////////////////////////////////////////
 //	constants
@@ -501,6 +504,14 @@ static void RenderZoomReticle();
 extern void HudDisplayRouter(tHUDItem *item);
 
 bool Hud_show_controls = false;
+
+static int GetStereoProjectionCounterShiftPixels(int reference_width) {
+  if (!VR_IsStereoRendering() || reference_width <= 0) {
+    return 0;
+  }
+
+  return static_cast<int>(std::lround(-gTransformProjection[2][0] * (static_cast<float>(reference_width) * 0.5f)));
+}
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -1994,6 +2005,7 @@ static inline void draw_reticle_sub(int cx, int cy, int rw, int rh, uint16_t on_
   }
 }
 
+
 //	renders the reticle
 void RenderReticle() {
   static uint16_t primary_index_last_frame = 0xffff;
@@ -2013,6 +2025,8 @@ void RenderReticle() {
   int cy = Ret_y_off + (FIXED_SCREEN_HEIGHT >> 1) + 6;
   int rw = RET_IMAGE_WIDTH;
   int rh = RET_IMAGE_HEIGHT;
+
+  cx -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
 
   //	quad weapon check hack (any weapon states that change should be noted here.)
   if (prim_dyn_wb->flags & DWBF_QUAD) {
@@ -2045,8 +2059,12 @@ void RenderMissileReticle() {
   //	Crosshair reticle
   int cx = Game_window_w / 2;
   int cy = Game_window_h / 2;
+  int counter_shift = GetStereoProjectionCounterShiftPixels(Game_window_w);
 
-  RenderHUDTextFlags(HUDTEXT_CENTERED, GR_RED, HUD_ALPHA, 0, 10, cy - 50, TXT_HUD_GUIDED);
+  cx -= counter_shift;
+
+  RenderHUDTextFlags(0, GR_RED, HUD_ALPHA, 0, (Game_window_w / 2) - (RenderHUDGetTextLineWidth(TXT_HUD_GUIDED) / 2) + counter_shift,
+                     cy - 50, TXT_HUD_GUIDED);
   grtext_Flush();
 
   rend_SetZBufferState(0);
@@ -2063,13 +2081,18 @@ void RenderZoomReticle() {
   int cx = Game_window_w / 2;
   int cy = Game_window_h / 2;
   int text_height = grfont_GetHeight(HUD_FONT);
+  int counter_shift = GetStereoProjectionCounterShiftPixels(Game_window_w);
   char str[255];
 
-  RenderHUDTextFlags(HUDTEXT_CENTERED, GR_RED, HUD_ALPHA, 0, 10, cy - 50, TXT_HUD_ZOOM);
+  cx -= counter_shift;
+
+  RenderHUDTextFlags(0, GR_RED, HUD_ALPHA, 0, (Game_window_w / 2) - (RenderHUDGetTextLineWidth(TXT_HUD_ZOOM) / 2) + counter_shift,
+                     cy - 50, TXT_HUD_ZOOM);
 
   snprintf(str, sizeof(str), TXT_HUD_ZOOM_UNITS, Players[Player_num].zoom_distance);
 
-  RenderHUDTextFlags(HUDTEXT_CENTERED, GR_RED, HUD_ALPHA, 0, 10, cy - 50 + text_height, str);
+  RenderHUDTextFlags(0, GR_RED, HUD_ALPHA, 0, (Game_window_w / 2) - (RenderHUDGetTextLineWidth(str) / 2) + counter_shift,
+                     cy - 50 + text_height, str);
   grtext_Flush();
 
   rend_SetZBufferState(0);
