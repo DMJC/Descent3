@@ -437,6 +437,7 @@
 #include "gamecinematics.h"
 #include "CtlCfgElem.h"
 #include "ctlconfig.h"
+#include "vr.h"
 
 //////////////////////////////////////////////////////////////////////////////
 //	constants
@@ -2040,11 +2041,22 @@ void RenderReticle() {
   draw_reticle_sub(cx, cy, rw, rh, reticle_mask(pobj, prim_wb, prim_wb_index), Ret_prim_mask, Ret_prim_wb);
   draw_reticle_sub(cx, cy, rw, rh, reticle_mask(pobj, sec_wb, sec_wb_index), Ret_sec_mask, Ret_sec_wb);
 
-  if (Reticle_elem_array[RET_LGUNSIGHT].bmp_off > -1)
-    RenderHUDQuad(cx - rw, cy - rh / 2, rw, rh, 0, 0, 1, 1, Reticle_elem_array[RET_LGUNSIGHT].bmp_off, 192);
+  if (VR_IsEnabled() && VR_IsStereoRendering()) {
+    int single_sight_bmp = -1;
+    if (Reticle_elem_array[RET_LGUNSIGHT].bmp_off > -1)
+      single_sight_bmp = Reticle_elem_array[RET_LGUNSIGHT].bmp_off;
+    else if (Reticle_elem_array[RET_RGUNSIGHT].bmp_off > -1)
+      single_sight_bmp = Reticle_elem_array[RET_RGUNSIGHT].bmp_off;
 
-  if (Reticle_elem_array[RET_RGUNSIGHT].bmp_off > -1)
-    RenderHUDQuad(cx, cy - rh / 2, rw, rh, 0, 0, 1, 1, Reticle_elem_array[RET_RGUNSIGHT].bmp_off, 192);
+    if (single_sight_bmp > -1)
+      RenderHUDQuad(cx - rw / 2, cy - rh / 2, rw, rh, 0, 0, 1, 1, single_sight_bmp, 192);
+  } else {
+    if (Reticle_elem_array[RET_LGUNSIGHT].bmp_off > -1)
+      RenderHUDQuad(cx - rw, cy - rh / 2, rw, rh, 0, 0, 1, 1, Reticle_elem_array[RET_LGUNSIGHT].bmp_off, 192);
+
+    if (Reticle_elem_array[RET_RGUNSIGHT].bmp_off > -1)
+      RenderHUDQuad(cx, cy - rh / 2, rw, rh, 0, 0, 1, 1, Reticle_elem_array[RET_RGUNSIGHT].bmp_off, 192);
+  }
 }
 
 //	renders missile reticle
