@@ -1994,6 +1994,13 @@ static inline void draw_reticle_sub(int cx, int cy, int rw, int rh, uint16_t on_
   }
 }
 
+static int GetHUDConvergenceOffsetX() {
+  if (Hud_aspect_x == 0.0f)
+    return 0;
+
+  return (int)(GetHUDConvergenceOffsetPixels() / Hud_aspect_x);
+}
+
 //	renders the reticle
 void RenderReticle() {
   static uint16_t primary_index_last_frame = 0xffff;
@@ -2009,7 +2016,7 @@ void RenderReticle() {
   otype_wb_info *sec_wb = &ship->static_wb[sec_wb_index];
   dynamic_wb_info *prim_dyn_wb = &pobj->dynamic_wb[prim_wb_index];
 
-  int cx = Ret_x_off + (FIXED_SCREEN_WIDTH >> 1);
+  int cx = Ret_x_off + (FIXED_SCREEN_WIDTH >> 1) + GetHUDConvergenceOffsetX();
   int cy = Ret_y_off + (FIXED_SCREEN_HEIGHT >> 1) + 6;
   int rw = RET_IMAGE_WIDTH;
   int rh = RET_IMAGE_HEIGHT;
@@ -2043,37 +2050,36 @@ void RenderReticle() {
 //	renders missile reticle
 void RenderMissileReticle() {
   //	Crosshair reticle
-  int reticle_cx = Ret_x_off + (FIXED_SCREEN_WIDTH >> 1);
-  int reticle_cy = Ret_y_off + (FIXED_SCREEN_HEIGHT >> 1);
-  int cx = HUD_X(reticle_cx);
-  int cy = HUD_Y(reticle_cy);
+  int cx = Ret_x_off + (FIXED_SCREEN_WIDTH >> 1) + GetHUDConvergenceOffsetX();
+  int cy = Ret_y_off + (FIXED_SCREEN_HEIGHT >> 1);
 
-  RenderHUDTextFlags(HUDTEXT_CENTERED, GR_RED, HUD_ALPHA, 0, 10, reticle_cy - 50, TXT_HUD_GUIDED);
+  int text_x = cx - (RenderHUDGetTextLineWidth(TXT_HUD_GUIDED) / 2);
+  RenderHUDTextFlags(0, GR_RED, HUD_ALPHA, 0, text_x, cy - 50, TXT_HUD_GUIDED);
   grtext_Flush();
 
   rend_SetZBufferState(0);
   rend_SetFlatColor(GR_GREEN);
 
-  rend_DrawLine(cx - 6, cy, cx + 6, cy);
-  rend_DrawLine(cx, cy - 6, cx, cy + 6);
+  rend_DrawLine((int)HUD_X(cx - 6), (int)HUD_Y(cy), (int)HUD_X(cx + 6), (int)HUD_Y(cy));
+  rend_DrawLine((int)HUD_X(cx), (int)HUD_Y(cy - 6), (int)HUD_X(cx), (int)HUD_Y(cy + 6));
   rend_SetZBufferState(1);
 }
 
 //	renders missile reticle
 void RenderZoomReticle() {
   //	Crosshair reticle
-  int reticle_cx = Ret_x_off + (FIXED_SCREEN_WIDTH >> 1);
-  int reticle_cy = Ret_y_off + (FIXED_SCREEN_HEIGHT >> 1);
-  int cx = HUD_X(reticle_cx);
-  int cy = HUD_Y(reticle_cy);
+  int cx = Ret_x_off + (FIXED_SCREEN_WIDTH >> 1) + GetHUDConvergenceOffsetX();
+  int cy = Ret_y_off + (FIXED_SCREEN_HEIGHT >> 1);
   int text_height = grfont_GetHeight(HUD_FONT);
   char str[255];
 
-  RenderHUDTextFlags(HUDTEXT_CENTERED, GR_RED, HUD_ALPHA, 0, 10, reticle_cy - 50, TXT_HUD_ZOOM);
+  int zoom_text_x = cx - (RenderHUDGetTextLineWidth(TXT_HUD_ZOOM) / 2);
+  RenderHUDTextFlags(0, GR_RED, HUD_ALPHA, 0, zoom_text_x, cy - 50, TXT_HUD_ZOOM);
 
   snprintf(str, sizeof(str), TXT_HUD_ZOOM_UNITS, Players[Player_num].zoom_distance);
 
-  RenderHUDTextFlags(HUDTEXT_CENTERED, GR_RED, HUD_ALPHA, 0, 10, reticle_cy - 50 + text_height, str);
+  int units_text_x = cx - (RenderHUDGetTextLineWidth(str) / 2);
+  RenderHUDTextFlags(0, GR_RED, HUD_ALPHA, 0, units_text_x, cy - 50 + text_height, str);
   grtext_Flush();
 
   rend_SetZBufferState(0);
@@ -2083,8 +2089,8 @@ void RenderZoomReticle() {
   else
     rend_SetFlatColor(GR_GREEN);
 
-  rend_DrawLine(cx - 8, cy, cx + 8, cy);
-  rend_DrawLine(cx, cy - 8, cx, cy + 8);
+  rend_DrawLine((int)HUD_X(cx - 8), (int)HUD_Y(cy), (int)HUD_X(cx + 8), (int)HUD_Y(cy));
+  rend_DrawLine((int)HUD_X(cx), (int)HUD_Y(cy - 8), (int)HUD_X(cx), (int)HUD_Y(cy + 8));
 }
 
 /*
