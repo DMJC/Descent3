@@ -2043,10 +2043,12 @@ void RenderReticle() {
 //	renders missile reticle
 void RenderMissileReticle() {
   //	Crosshair reticle
-  int cx = Game_window_w / 2;
-  int cy = Game_window_h / 2;
+  int reticle_cx = Ret_x_off + (FIXED_SCREEN_WIDTH >> 1);
+  int reticle_cy = Ret_y_off + (FIXED_SCREEN_HEIGHT >> 1);
+  int cx = HUD_X(reticle_cx);
+  int cy = HUD_Y(reticle_cy);
 
-  RenderHUDTextFlags(HUDTEXT_CENTERED, GR_RED, HUD_ALPHA, 0, 10, cy - 50, TXT_HUD_GUIDED);
+  RenderHUDTextFlags(HUDTEXT_CENTERED, GR_RED, HUD_ALPHA, 0, 10, reticle_cy - 50, TXT_HUD_GUIDED);
   grtext_Flush();
 
   rend_SetZBufferState(0);
@@ -2060,16 +2062,18 @@ void RenderMissileReticle() {
 //	renders missile reticle
 void RenderZoomReticle() {
   //	Crosshair reticle
-  int cx = Game_window_w / 2;
-  int cy = Game_window_h / 2;
+  int reticle_cx = Ret_x_off + (FIXED_SCREEN_WIDTH >> 1);
+  int reticle_cy = Ret_y_off + (FIXED_SCREEN_HEIGHT >> 1);
+  int cx = HUD_X(reticle_cx);
+  int cy = HUD_Y(reticle_cy);
   int text_height = grfont_GetHeight(HUD_FONT);
   char str[255];
 
-  RenderHUDTextFlags(HUDTEXT_CENTERED, GR_RED, HUD_ALPHA, 0, 10, cy - 50, TXT_HUD_ZOOM);
+  RenderHUDTextFlags(HUDTEXT_CENTERED, GR_RED, HUD_ALPHA, 0, 10, reticle_cy - 50, TXT_HUD_ZOOM);
 
   snprintf(str, sizeof(str), TXT_HUD_ZOOM_UNITS, Players[Player_num].zoom_distance);
 
-  RenderHUDTextFlags(HUDTEXT_CENTERED, GR_RED, HUD_ALPHA, 0, 10, cy - 50 + text_height, str);
+  RenderHUDTextFlags(HUDTEXT_CENTERED, GR_RED, HUD_ALPHA, 0, 10, reticle_cy - 50 + text_height, str);
   grtext_Flush();
 
   rend_SetZBufferState(0);
