@@ -2510,7 +2510,9 @@ static int CalculateHUDConvergenceOffsetPixels(bool is_left_eye, float eye_separ
   const float proj0 = (aspect <= 1.0f) ? oOT : (oOT / aspect);
   const float proj8 = frustum_shift * proj0;
 
-  return (int)std::lround(proj8 * ((float)Game_window_w * 0.5f));
+  // Convert projection matrix horizontal translation into a HUD-space counter-shift.
+  // Sign is inverted because proj8 already shifts projected positions on screen.
+  return (int)std::lround(-proj8 * ((float)Game_window_w * 0.5f));
 }
 
 // Render into the big window
