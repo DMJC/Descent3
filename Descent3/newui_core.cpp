@@ -197,6 +197,7 @@
 #include "descent.h"
 #include "stringtable.h"
 #include "gamefont.h"
+#include "gamesequence.h"
 #include "textaux.h"
 #include "d3music.h"
 #include "hlsoundlib.h"
@@ -614,7 +615,7 @@ void DoUIFrame() {
   if (Multi_bail_ui_menu) {
     UI_frame_result = NEWUIRES_FORCEQUIT;
   } else {
-    const bool vr_menu_mode = VR_IsEnabled() && GetFunctionMode() == MENU_MODE;
+    const bool vr_menu_mode = VR_IsEnabled() && (GetFunctionMode() == MENU_MODE || Game_interface_mode != GAME_INTERFACE);
     if (vr_menu_mode) {
       VR_BeginMenuFramebufferRender();
     }
@@ -657,7 +658,7 @@ void DoUIFrameWithoutInput() {
   if (Multi_bail_ui_menu) {
     UI_frame_result = NEWUIRES_FORCEQUIT;
   } else {
-    const bool vr_menu_mode = VR_IsEnabled() && GetFunctionMode() == MENU_MODE;
+    const bool vr_menu_mode = VR_IsEnabled() && (GetFunctionMode() == MENU_MODE || Game_interface_mode != GAME_INTERFACE);
     if (vr_menu_mode) {
       VR_BeginMenuFramebufferRender();
     }
