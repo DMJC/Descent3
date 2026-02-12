@@ -489,12 +489,13 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   StartFrame(0, 0, render_width, render_height);
   rend_ClearScreen(GR_BLACK);
 
-  // Convert pixel shift to world space offset
+  // Convert the HUD stereo counter-shift from pixels to the cinema screen's
+  // world-space width so 2D menu content converges correctly in stereo.
   const float screen_distance = 5.0f;
-  const float screen_width_world = 6.0f; // Approximate width of cinema screen arc
-  float world_shift = 0.0f;
-  world_shift -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
-  
+  const float screen_width_world = 3.0f;
+  const int counter_shift_pixels = GetStereoProjectionCounterShiftPixels(render_width);
+  const float world_units_per_pixel = (render_width > 0) ? (screen_width_world / static_cast<float>(render_width)) : 0.0f;
+  const float world_shift = -static_cast<float>(counter_shift_pixels) * world_units_per_pixel;
   // Camera stays at its proper eye offset position
   vector camera_pos = eye_offset;
   matrix camera_orient = Identity_matrix;
@@ -508,8 +509,8 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
                 static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
   
   // MOVE THE GEOMETRY by applying world_shift
-  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, 120.0f, 5.0f, 3.0f, -world_shift);
-
+//  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, 120.0f, 5.0f, 3.0f, -world_shift);
+  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, 120.0f, screen_distance, 3.0f, world_shift);
   g3_EndFrame();
   EndFrame();
   
@@ -639,23 +640,15 @@ void VR_RenderMenuFrame() {
   
   // Render the curved cinema screen for each eye
   if (Vr_render_mode == VrRenderMode::Stereo) {
-    // Get the proper eye-to-head transforms from OpenVR
     auto left_eye_transform = Vr_system->GetEyeToHeadTransform(vr::Eye_Left);
     auto right_eye_transform = Vr_system->GetEyeToHeadTransform(vr::Eye_Right);
-    
-    // Extract translation from the 3x4 matrix (last column)
-    vector left_eye_offset{left_eye_transform.m[0][3], 
-                          left_eye_transform.m[1][3], 
-                          left_eye_transform.m[2][3]};
-    vector right_eye_offset{right_eye_transform.m[0][3], 
-                           right_eye_transform.m[1][3], 
-                           right_eye_transform.m[2][3]};
-    int cx = 0;
-    cx -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
+
+    vector left_eye_offset{left_eye_transform.m[0][3], left_eye_transform.m[1][3], left_eye_transform.m[2][3]};
+    vector right_eye_offset{right_eye_transform.m[0][3], right_eye_transform.m[1][3], right_eye_transform.m[2][3]};
+
     VR_RenderCinemaScreenForEye(Vr_submit_left, left_eye_offset, true);
     VR_RenderCinemaScreenForEye(Vr_submit_right, right_eye_offset, false);
   } else {
-    // Cinema mode: both eyes see the same centered view
     vector zero_offset{0.0f, 0.0f, 0.0f};
     VR_RenderCinemaScreenForEye(Vr_submit_left, zero_offset, true);
     VR_RenderCinemaScreenForEye(Vr_submit_right, zero_offset, false);
