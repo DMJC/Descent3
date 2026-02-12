@@ -340,7 +340,7 @@ std::vector<tVideoResolution> Video_res_list = {{512, 384},
                                                 {3440, 1440},
                                                 {3840, 1600}};
 
-int Default_resolution_id = 7; // 1280x720 in the default list
+int Default_resolution_id = 6; // 1280x720 in the default list
 int Current_video_resolution_id = Default_resolution_id;
 float Render_FOV_setting = 72.0f;
 bool Game_fullscreen = true;
