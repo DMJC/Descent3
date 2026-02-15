@@ -31,7 +31,7 @@
 #include "log.h"
 #include "NewBitmap.h"
 #include "../renderer/dyna_gl.h"
-#include "openvr.h"
+#include <openxr/openxr.h>
 #include "renderer.h"
 #include "vecmat.h"
 #include <SDL3/SDL.h>
@@ -39,12 +39,14 @@
 
 namespace {
 bool Vr_enabled = false;
-bool Vr_openvr_ready = false;
+bool Vr_openxr_ready = false;
 VrRenderMode Vr_render_mode = VrRenderMode::Cinema;
-vr::IVRSystem *Vr_system = nullptr;
+XrInstance Vr_instance = XR_NULL_HANDLE;
+XrSystemId Vr_system_id = XR_NULL_SYSTEM_ID;
 float Vr_eye_separation = 0.064f;
 uint32_t Vr_submit_width = 0;
 uint32_t Vr_submit_height = 0;
+bool Vr_submit_warning_logged = false;
 struct VrSubmitSurface {
   GLuint texture = 0;
   std::vector<uint32_t> buffer;
@@ -62,8 +64,29 @@ bool Vr_menu_texture_registered = false;
 void VR_DeleteSubmitSurface(VrSubmitSurface &surface);
 
 constexpr float kPi = 3.14159265358979323846f;
-constexpr uint32_t kVrTargetWidth = 2000;
-constexpr uint32_t kVrTargetHeight = 2040;
+constexpr uint32_t kDefaultVrTargetWidth = 2000;
+constexpr uint32_t kDefaultVrTargetHeight = 2040;
+
+const char *VR_XrResultToString(XrResult result) {
+  switch (result) {
+  case XR_SUCCESS:
+    return "XR_SUCCESS";
+  case XR_ERROR_RUNTIME_FAILURE:
+    return "XR_ERROR_RUNTIME_FAILURE";
+  case XR_ERROR_INSTANCE_LOST:
+    return "XR_ERROR_INSTANCE_LOST";
+  case XR_ERROR_SYSTEM_INVALID:
+    return "XR_ERROR_SYSTEM_INVALID";
+  case XR_ERROR_FORM_FACTOR_UNSUPPORTED:
+    return "XR_ERROR_FORM_FACTOR_UNSUPPORTED";
+  case XR_ERROR_FORM_FACTOR_UNAVAILABLE:
+    return "XR_ERROR_FORM_FACTOR_UNAVAILABLE";
+  case XR_ERROR_INITIALIZATION_FAILED:
+    return "XR_ERROR_INITIALIZATION_FAILED";
+  default:
+    return "XR_ERROR_UNKNOWN";
+  }
+}
 
 struct VrGlFns {
   bool loaded = false;
@@ -238,7 +261,7 @@ void VR_BlitMenuTextureToWindow() {
 }
 
 void VR_EnsureSubmitTexture() {
-  if (!Vr_openvr_ready || !Vr_system || Renderer_type != RENDERER_OPENGL) {
+  if (!Vr_openxr_ready || Renderer_type != RENDERER_OPENGL) {
     return;
   }
 
@@ -246,14 +269,14 @@ void VR_EnsureSubmitTexture() {
   if (!gl.gen_textures || !gl.bind_texture || !gl.tex_parameteri || !gl.tex_image_2d || !gl.delete_textures) {
     static bool missing_gl_warned = false;
     if (!missing_gl_warned) {
-      LOG_DEBUG << "OpenVR: Missing GL entry points for texture submission.";
+      LOG_DEBUG << "OpenXR: Missing GL entry points for texture submission.";
       missing_gl_warned = true;
     }
     return;
   }
 
-  uint32_t target_w = kVrTargetWidth;
-  uint32_t target_h = kVrTargetHeight;
+  uint32_t target_w = kDefaultVrTargetWidth;
+  uint32_t target_h = kDefaultVrTargetHeight;
 
   if (Vr_submit_width == target_w && Vr_submit_height == target_h) {
     return;
@@ -309,7 +332,7 @@ bool VR_EnsureSubmitSurface(VrSubmitSurface &surface) {
 }
 
 void VR_UpdateSubmitSurface(const NewBitmap &screenshot, VrSubmitSurface &surface, bool allow_stereo_crop) {
-  if (!Vr_openvr_ready || surface.texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
+  if (!Vr_openxr_ready || surface.texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
     return;
   }
 
@@ -344,13 +367,10 @@ void VR_UpdateSubmitSurface(const NewBitmap &screenshot, VrSubmitSurface &surfac
                       surface.buffer.data());
 }
 
-void VR_UpdateOpenVRPoses() {
-  if (!Vr_openvr_ready || !vr::VRCompositor()) {
+void VR_UpdateOpenXrPoses() {
+  if (!Vr_openxr_ready) {
     return;
   }
-
-  vr::TrackedDevicePose_t poses[vr::k_unMaxTrackedDeviceCount];
-  vr::VRCompositor()->WaitGetPoses(poses, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
 }
 
 void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max, float arc_degrees, float radius, float height, float x_shift = 0.0f) {
@@ -457,14 +477,15 @@ void VR_DrawTestQuad(int texture_handle, float u_max, float v_max) {
 // Helper function to render the 3D cinema screen for one eye
 // Call this ONCE during VR initialization (in VR_Init or similar)
 void VR_InitStereoFrustums() {
-  if (!Vr_system) return;
+  if (!Vr_openxr_ready) return;
   
   g3StereoFrustum left_frustum, right_frustum;
-  
-  Vr_system->GetProjectionRaw(vr::Eye_Left, &left_frustum.left, &left_frustum.right,
-                               &left_frustum.top, &left_frustum.bottom);
-  Vr_system->GetProjectionRaw(vr::Eye_Right, &right_frustum.left, &right_frustum.right,
-                               &right_frustum.top, &right_frustum.bottom);
+
+  left_frustum.left = -1.0f;
+  left_frustum.right = 1.0f;
+  left_frustum.top = -1.0f;
+  left_frustum.bottom = 1.0f;
+  right_frustum = left_frustum;
   
   LOG_INFO.printf("VR: Setting stereo frustums - Left(L=%f,R=%f,T=%f,B=%f) Right(L=%f,R=%f,T=%f,B=%f)",
                   left_frustum.left, left_frustum.right, left_frustum.top, left_frustum.bottom,
@@ -553,49 +574,52 @@ void VR_InitFromCommandLine() {
     return;
   }
 
-  vr::EVRInitError error = vr::VRInitError_None;
-  Vr_system = vr::VR_Init(&error, vr::VRApplication_Scene);
-  if (error != vr::VRInitError_None) {
-    LOG_WARNING.printf("OpenVR init failed: %s", vr::VR_GetVRInitErrorAsEnglishDescription(error));
-    Vr_system = nullptr;
+  XrInstanceCreateInfo instance_info{XR_TYPE_INSTANCE_CREATE_INFO};
+  SDL_strlcpy(instance_info.applicationInfo.applicationName, "Descent3", XR_MAX_APPLICATION_NAME_SIZE);
+  instance_info.applicationInfo.applicationVersion = 1;
+  SDL_strlcpy(instance_info.applicationInfo.engineName, "Descent3", XR_MAX_ENGINE_NAME_SIZE);
+  instance_info.applicationInfo.engineVersion = 1;
+  instance_info.applicationInfo.apiVersion = XR_CURRENT_API_VERSION;
+
+  XrResult result = xrCreateInstance(&instance_info, &Vr_instance);
+  if (XR_FAILED(result)) {
+    LOG_WARNING.printf("OpenXR instance init failed: %s", VR_XrResultToString(result));
     Vr_enabled = false;
     return;
   }
 
-  Vr_openvr_ready = true;
-  if (!vr::VRCompositor()) {
-    LOG_WARNING << "OpenVR compositor unavailable.";
-    Vr_openvr_ready = false;
+  XrSystemGetInfo system_info{XR_TYPE_SYSTEM_GET_INFO};
+  system_info.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
+  result = xrGetSystem(Vr_instance, &system_info, &Vr_system_id);
+  if (XR_FAILED(result)) {
+    LOG_WARNING.printf("OpenXR system query failed: %s", VR_XrResultToString(result));
+    xrDestroyInstance(Vr_instance);
+    Vr_instance = XR_NULL_HANDLE;
+    Vr_system_id = XR_NULL_SYSTEM_ID;
+    Vr_enabled = false;
+    return;
   }
 
-  if (Vr_system) {
-    auto left = Vr_system->GetEyeToHeadTransform(vr::Eye_Left);
-    auto right = Vr_system->GetEyeToHeadTransform(vr::Eye_Right);
-    const float separation = std::fabs(right.m[0][3] - left.m[0][3]);
-    if (separation > 0.0f) {
-      Vr_eye_separation = separation;
+  Vr_openxr_ready = true;
+
+  uint32_t view_count = 0;
+  result = xrEnumerateViewConfigurationViews(Vr_instance, Vr_system_id, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
+                                             0, &view_count, nullptr);
+  if (XR_SUCCEEDED(result) && view_count > 0) {
+    std::vector<XrViewConfigurationView> views(view_count, {XR_TYPE_VIEW_CONFIGURATION_VIEW});
+    result = xrEnumerateViewConfigurationViews(Vr_instance, Vr_system_id, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
+                                               view_count, &view_count, views.data());
+    if (XR_SUCCEEDED(result)) {
+      Vr_submit_width = views[0].recommendedImageRectWidth;
+      Vr_submit_height = views[0].recommendedImageRectHeight;
     }
-
-    float left_l = 0.0f;
-    float left_r = 0.0f;
-    float left_t = 0.0f;
-    float left_b = 0.0f;
-    float right_l = 0.0f;
-    float right_r = 0.0f;
-    float right_t = 0.0f;
-    float right_b = 0.0f;
-    Vr_system->GetProjectionRaw(vr::Eye_Left, &left_l, &left_r, &left_t, &left_b);
-    Vr_system->GetProjectionRaw(vr::Eye_Right, &right_l, &right_r, &right_t, &right_b);
-
-    g3StereoFrustum left_frustum{left_l, left_r, -left_t, -left_b};
-    g3StereoFrustum right_frustum{right_l, right_r, -right_t, -right_b};
-    g3_SetStereoFrustum(&right_frustum, &left_frustum);
   }
+  VR_InitStereoFrustums();
 
-  if (Vr_openvr_ready) {
-    uint32_t target_w = kVrTargetWidth;
-    uint32_t target_h = kVrTargetHeight;
-    LOG_INFO.printf("OpenVR enabled via -vr. Recommended render target %ux%u.", target_w, target_h);
+  if (Vr_openxr_ready) {
+    const uint32_t target_w = Vr_submit_width == 0 ? kDefaultVrTargetWidth : Vr_submit_width;
+    const uint32_t target_h = Vr_submit_height == 0 ? kDefaultVrTargetHeight : Vr_submit_height;
+    LOG_INFO.printf("OpenXR enabled via -vr. Recommended render target %ux%u.", target_w, target_h);
   }
 }
 
@@ -620,11 +644,11 @@ void VR_RenderMenuFrame() {
     return;
   }
 
-  if (!Vr_openvr_ready || !Vr_system || Renderer_type != RENDERER_OPENGL) {
+  if (!Vr_openxr_ready || Renderer_type != RENDERER_OPENGL) {
     return;
   }
 
-  VR_UpdateOpenVRPoses();
+  VR_UpdateOpenXrPoses();
   VR_EnsureSubmitTexture();
   if (Vr_submit_width == 0 || Vr_submit_height == 0) {
     return;
@@ -639,17 +663,8 @@ void VR_RenderMenuFrame() {
   
   // Render the curved cinema screen for each eye
   if (Vr_render_mode == VrRenderMode::Stereo) {
-    // Get the proper eye-to-head transforms from OpenVR
-    auto left_eye_transform = Vr_system->GetEyeToHeadTransform(vr::Eye_Left);
-    auto right_eye_transform = Vr_system->GetEyeToHeadTransform(vr::Eye_Right);
-    
-    // Extract translation from the 3x4 matrix (last column)
-    vector left_eye_offset{left_eye_transform.m[0][3], 
-                          left_eye_transform.m[1][3], 
-                          left_eye_transform.m[2][3]};
-    vector right_eye_offset{right_eye_transform.m[0][3], 
-                           right_eye_transform.m[1][3], 
-                           right_eye_transform.m[2][3]};
+    vector left_eye_offset{-Vr_eye_separation * 0.5f, 0.0f, 0.0f};
+    vector right_eye_offset{Vr_eye_separation * 0.5f, 0.0f, 0.0f};
     int cx = 0;
     cx -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
     VR_RenderCinemaScreenForEye(Vr_submit_left, left_eye_offset, true);
@@ -664,14 +679,9 @@ void VR_RenderMenuFrame() {
   // Blit the menu texture to the monitor window
   VR_BlitMenuTextureToWindow();
 
-  // Submit to OpenVR
-  if (Vr_openvr_ready && vr::VRCompositor()) {
-    if (Vr_submit_left.texture != 0 && Vr_submit_right.texture != 0) {
-      vr::Texture_t left_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
-                                    vr::TextureType_OpenGL, vr::ColorSpace_Auto};
-      vr::VRCompositor()->Submit(vr::Eye_Left, &left_texture);
-      vr::VRCompositor()->Submit(vr::Eye_Right, &left_texture);
-    }
+  if (Vr_openxr_ready && !Vr_submit_warning_logged) {
+    LOG_WARNING << "OpenXR runtime initialized, but frame submission is not wired to an OpenXR swapchain yet.";
+    Vr_submit_warning_logged = true;
   }
 }
 
@@ -680,11 +690,11 @@ void VR_SubmitStereoFrame(const NewBitmap &left, const NewBitmap &right) {
     return;
   }
 
-  if (!Vr_openvr_ready || !Vr_system || Renderer_type != RENDERER_OPENGL) {
+  if (!Vr_openxr_ready || Renderer_type != RENDERER_OPENGL) {
     return;
   }
 
-  VR_UpdateOpenVRPoses();
+  VR_UpdateOpenXrPoses();
   VR_EnsureSubmitTexture();
   if (Vr_submit_width == 0 || Vr_submit_height == 0) {
     return;
@@ -697,13 +707,9 @@ void VR_SubmitStereoFrame(const NewBitmap &left, const NewBitmap &right) {
   VR_UpdateSubmitSurface(left, Vr_submit_left, false);
   VR_UpdateSubmitSurface(right, Vr_submit_right, false);
 
-  if (Vr_openvr_ready && vr::VRCompositor()) {
-    vr::Texture_t left_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
-                                  vr::TextureType_OpenGL, vr::ColorSpace_Auto};
-    vr::Texture_t right_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_right.texture)),
-                                   vr::TextureType_OpenGL, vr::ColorSpace_Auto};
-    vr::VRCompositor()->Submit(vr::Eye_Left, &left_texture);
-    vr::VRCompositor()->Submit(vr::Eye_Right, &right_texture);
+  if (Vr_openxr_ready && !Vr_submit_warning_logged) {
+    LOG_WARNING << "OpenXR runtime initialized, but frame submission is not wired to an OpenXR swapchain yet.";
+    Vr_submit_warning_logged = true;
   }
 }
 
@@ -765,10 +771,12 @@ void VR_Shutdown() {
     Vr_menu_texture_registered = false;
   }
   
-  if (Vr_system) {
-    vr::VR_Shutdown();
-    Vr_system = nullptr;
+  if (Vr_instance != XR_NULL_HANDLE) {
+    xrDestroyInstance(Vr_instance);
+    Vr_instance = XR_NULL_HANDLE;
   }
-  Vr_openvr_ready = false;
+  Vr_system_id = XR_NULL_SYSTEM_ID;
+  Vr_openxr_ready = false;
+  Vr_submit_warning_logged = false;
   Vr_enabled = false;
 }
