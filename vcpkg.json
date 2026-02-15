@@ -4,7 +4,7 @@
     "cpp-httplib",
     "glm",
     "gtest",
-    "openvr",
+    "openxr-loader",
     "plog",
     {
       "name": "sdl3",
