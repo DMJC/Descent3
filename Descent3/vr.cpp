@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <array>
 #include <vector>
 
 #include "3d.h"
@@ -31,11 +32,19 @@
 #include "log.h"
 #include "NewBitmap.h"
 #include "../renderer/dyna_gl.h"
+#define XR_USE_GRAPHICS_API_OPENGL
+#if defined(__linux__)
+#define XR_USE_PLATFORM_XLIB
+#endif
 #include <openxr/openxr.h>
+#include <openxr/openxr_platform.h>
 #include "renderer.h"
 #include "vecmat.h"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_opengl.h>
+#if defined(__linux__)
+#include <GL/glx.h>
+#endif
 
 namespace {
 bool Vr_enabled = false;
@@ -43,6 +52,20 @@ bool Vr_openxr_ready = false;
 VrRenderMode Vr_render_mode = VrRenderMode::Cinema;
 XrInstance Vr_instance = XR_NULL_HANDLE;
 XrSystemId Vr_system_id = XR_NULL_SYSTEM_ID;
+XrSession Vr_session = XR_NULL_HANDLE;
+XrSpace Vr_app_space = XR_NULL_HANDLE;
+XrEnvironmentBlendMode Vr_blend_mode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+bool Vr_session_running = false;
+uint32_t Vr_view_count = 0;
+std::array<XrView, 2> Vr_views = {XrView{XR_TYPE_VIEW}, XrView{XR_TYPE_VIEW}};
+
+struct VrOpenXrSwapchain {
+  XrSwapchain handle = XR_NULL_HANDLE;
+  int32_t width = 0;
+  int32_t height = 0;
+  std::vector<XrSwapchainImageOpenGLKHR> images;
+};
+std::array<VrOpenXrSwapchain, 2> Vr_swapchains;
 float Vr_eye_separation = 0.064f;
 uint32_t Vr_submit_width = 0;
 uint32_t Vr_submit_height = 0;
@@ -61,6 +84,10 @@ int Vr_menu_texture_size = 0;
 bool Vr_menu_texture_registered = false;
 
 void VR_DeleteSubmitSurface(VrSubmitSurface &surface);
+void VR_DestroyOpenXrSwapchains();
+void VR_DestroyOpenXrSession();
+bool VR_EnsureOpenXrSessionRunning();
+bool VR_SubmitOpenXrFrame(GLuint left_texture, GLuint right_texture);
 
 constexpr float kPi = 3.14159265358979323846f;
 constexpr uint32_t kDefaultVrTargetWidth = 2000;
@@ -183,6 +210,7 @@ struct VrGlFns {
   using TexParameteriFn = decltype(&glTexParameteri);
   using TexImage2DFn = decltype(&glTexImage2D);
   using TexSubImage2DFn = decltype(&glTexSubImage2D);
+  using CopyTexSubImage2DFn = decltype(&glCopyTexSubImage2D);
   using GenFramebuffersFn = void (*)(GLsizei, GLuint*);
   using DeleteFramebuffersFn = void (*)(GLsizei, const GLuint*);
   using BindFramebufferFn = void (*)(GLenum, GLuint);
@@ -195,6 +223,7 @@ struct VrGlFns {
   TexParameteriFn tex_parameteri = nullptr;
   TexImage2DFn tex_image_2d = nullptr;
   TexSubImage2DFn tex_sub_image_2d = nullptr;
+  CopyTexSubImage2DFn copy_tex_sub_image_2d = nullptr;
   GenFramebuffersFn gen_framebuffers = nullptr;
   DeleteFramebuffersFn delete_framebuffers = nullptr;
   BindFramebufferFn bind_framebuffer = nullptr;
@@ -222,6 +251,7 @@ VrGlFns &VR_GetGlFns() {
   fns.tex_parameteri = reinterpret_cast<VrGlFns::TexParameteriFn>(SDL_GL_GetProcAddress("glTexParameteri"));
   fns.tex_image_2d = reinterpret_cast<VrGlFns::TexImage2DFn>(SDL_GL_GetProcAddress("glTexImage2D"));
   fns.tex_sub_image_2d = reinterpret_cast<VrGlFns::TexSubImage2DFn>(SDL_GL_GetProcAddress("glTexSubImage2D"));
+  fns.copy_tex_sub_image_2d = reinterpret_cast<VrGlFns::CopyTexSubImage2DFn>(SDL_GL_GetProcAddress("glCopyTexSubImage2D"));
   fns.gen_framebuffers = reinterpret_cast<VrGlFns::GenFramebuffersFn>(SDL_GL_GetProcAddress("glGenFramebuffers"));
   fns.delete_framebuffers = reinterpret_cast<VrGlFns::DeleteFramebuffersFn>(SDL_GL_GetProcAddress("glDeleteFramebuffers"));
   fns.bind_framebuffer = reinterpret_cast<VrGlFns::BindFramebufferFn>(SDL_GL_GetProcAddress("glBindFramebuffer"));
@@ -229,8 +259,8 @@ VrGlFns &VR_GetGlFns() {
   fns.check_framebuffer_status = reinterpret_cast<VrGlFns::CheckFramebufferStatusFn>(SDL_GL_GetProcAddress("glCheckFramebufferStatus"));
   
   fns.loaded = fns.gen_textures && fns.delete_textures && fns.bind_texture && fns.tex_parameteri && fns.tex_image_2d &&
-               fns.tex_sub_image_2d && fns.gen_framebuffers && fns.delete_framebuffers && fns.bind_framebuffer &&
-               fns.framebuffer_texture_2d && fns.check_framebuffer_status;
+               fns.tex_sub_image_2d && fns.copy_tex_sub_image_2d && fns.gen_framebuffers && fns.delete_framebuffers &&
+               fns.bind_framebuffer && fns.framebuffer_texture_2d && fns.check_framebuffer_status;
   return fns;
 }
 
@@ -362,8 +392,8 @@ void VR_EnsureSubmitTexture() {
     return;
   }
 
-  uint32_t target_w = kDefaultVrTargetWidth;
-  uint32_t target_h = kDefaultVrTargetHeight;
+  uint32_t target_w = Vr_submit_width == 0 ? kDefaultVrTargetWidth : Vr_submit_width;
+  uint32_t target_h = Vr_submit_height == 0 ? kDefaultVrTargetHeight : Vr_submit_height;
 
   if (Vr_submit_width == target_w && Vr_submit_height == target_h) {
     return;
@@ -627,6 +657,200 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   }
 }
 
+void VR_DestroyOpenXrSwapchains() {
+  for (auto &swapchain : Vr_swapchains) {
+    if (swapchain.handle != XR_NULL_HANDLE) {
+      xrDestroySwapchain(swapchain.handle);
+      swapchain.handle = XR_NULL_HANDLE;
+    }
+    swapchain.images.clear();
+    swapchain.width = 0;
+    swapchain.height = 0;
+  }
+}
+
+void VR_DestroyOpenXrSession() {
+  VR_DestroyOpenXrSwapchains();
+  if (Vr_app_space != XR_NULL_HANDLE) {
+    xrDestroySpace(Vr_app_space);
+    Vr_app_space = XR_NULL_HANDLE;
+  }
+  if (Vr_session != XR_NULL_HANDLE) {
+    xrDestroySession(Vr_session);
+    Vr_session = XR_NULL_HANDLE;
+  }
+  Vr_session_running = false;
+}
+
+bool VR_EnsureOpenXrSessionRunning() {
+  if (!Vr_openxr_ready || Vr_session == XR_NULL_HANDLE) {
+    return false;
+  }
+
+  XrEventDataBuffer event_data{XR_TYPE_EVENT_DATA_BUFFER};
+  while (xrPollEvent(Vr_instance, &event_data) == XR_SUCCESS) {
+    if (event_data.type == XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED) {
+      const auto *state = reinterpret_cast<const XrEventDataSessionStateChanged *>(&event_data);
+      if (state->session != Vr_session) {
+        event_data = {XR_TYPE_EVENT_DATA_BUFFER};
+        continue;
+      }
+
+      if (state->state == XR_SESSION_STATE_READY && !Vr_session_running) {
+        XrSessionBeginInfo begin_info{XR_TYPE_SESSION_BEGIN_INFO};
+        begin_info.primaryViewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+        XrResult begin_result = xrBeginSession(Vr_session, &begin_info);
+        if (XR_FAILED(begin_result)) {
+          LOG_WARNING.printf("OpenXR begin session failed: %s (%d).", VR_XrResultToString(begin_result),
+                             static_cast<int>(begin_result));
+          return false;
+        }
+        Vr_session_running = true;
+      } else if (state->state == XR_SESSION_STATE_STOPPING && Vr_session_running) {
+        xrEndSession(Vr_session);
+        Vr_session_running = false;
+      } else if (state->state == XR_SESSION_STATE_EXITING || state->state == XR_SESSION_STATE_LOSS_PENDING) {
+        Vr_enabled = false;
+        Vr_openxr_ready = false;
+        return false;
+      }
+    }
+
+    event_data = {XR_TYPE_EVENT_DATA_BUFFER};
+  }
+
+  return Vr_session_running;
+}
+
+bool VR_CopyTextureToSwapchain(GLuint source_texture, VrOpenXrSwapchain &swapchain, uint32_t image_index) {
+  if (source_texture == 0 || image_index >= swapchain.images.size()) {
+    return false;
+  }
+
+  auto &gl = VR_GetGlFns();
+  if (!gl.gen_framebuffers || !gl.delete_framebuffers || !gl.bind_framebuffer || !gl.framebuffer_texture_2d ||
+      !gl.copy_tex_sub_image_2d || !gl.bind_texture) {
+    return false;
+  }
+
+  GLuint src_fbo = 0;
+  gl.gen_framebuffers(1, &src_fbo);
+  gl.bind_framebuffer(GL_FRAMEBUFFER, src_fbo);
+  gl.framebuffer_texture_2d(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, source_texture, 0);
+
+  gl.bind_texture(GL_TEXTURE_2D, swapchain.images[image_index].image);
+  const GLint copy_width = std::min(static_cast<GLint>(Vr_submit_width), swapchain.width);
+  const GLint copy_height = std::min(static_cast<GLint>(Vr_submit_height), swapchain.height);
+  gl.copy_tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, 0, 0, copy_width, copy_height);
+
+  gl.bind_framebuffer(GL_FRAMEBUFFER, 0);
+  gl.delete_framebuffers(1, &src_fbo);
+  return true;
+}
+
+bool VR_SubmitOpenXrFrame(GLuint left_texture, GLuint right_texture) {
+  if (!VR_EnsureOpenXrSessionRunning() || Vr_app_space == XR_NULL_HANDLE) {
+    return false;
+  }
+
+  XrFrameState frame_state{XR_TYPE_FRAME_STATE};
+  XrFrameWaitInfo frame_wait_info{XR_TYPE_FRAME_WAIT_INFO};
+  XrResult result = xrWaitFrame(Vr_session, &frame_wait_info, &frame_state);
+  if (XR_FAILED(result)) {
+    LOG_WARNING.printf("OpenXR wait frame failed: %s (%d).", VR_XrResultToString(result), static_cast<int>(result));
+    return false;
+  }
+
+  XrFrameBeginInfo frame_begin_info{XR_TYPE_FRAME_BEGIN_INFO};
+  result = xrBeginFrame(Vr_session, &frame_begin_info);
+  if (XR_FAILED(result)) {
+    LOG_WARNING.printf("OpenXR begin frame failed: %s (%d).", VR_XrResultToString(result), static_cast<int>(result));
+    return false;
+  }
+
+  if (!frame_state.shouldRender) {
+    XrFrameEndInfo frame_end_info{XR_TYPE_FRAME_END_INFO};
+    frame_end_info.displayTime = frame_state.predictedDisplayTime;
+    frame_end_info.environmentBlendMode = Vr_blend_mode;
+    frame_end_info.layerCount = 0;
+    frame_end_info.layers = nullptr;
+    xrEndFrame(Vr_session, &frame_end_info);
+    return true;
+  }
+
+  XrViewLocateInfo locate_info{XR_TYPE_VIEW_LOCATE_INFO};
+  locate_info.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+  locate_info.displayTime = frame_state.predictedDisplayTime;
+  locate_info.space = Vr_app_space;
+
+  XrViewState view_state{XR_TYPE_VIEW_STATE};
+  uint32_t view_count_output = 0;
+  result = xrLocateViews(Vr_session, &locate_info, &view_state, Vr_view_count, &view_count_output, Vr_views.data());
+  if (XR_FAILED(result) || view_count_output < 2) {
+    LOG_WARNING.printf("OpenXR locate views failed: %s (%d).", VR_XrResultToString(result), static_cast<int>(result));
+    return false;
+  }
+
+  GLuint source_textures[2] = {left_texture, right_texture};
+  XrCompositionLayerProjectionView projection_views[2] = {
+      {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW}, {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW}};
+
+  for (uint32_t eye = 0; eye < 2; ++eye) {
+    auto &swapchain = Vr_swapchains[eye];
+    XrSwapchainImageAcquireInfo acquire_info{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
+    uint32_t image_index = 0;
+    result = xrAcquireSwapchainImage(swapchain.handle, &acquire_info, &image_index);
+    if (XR_FAILED(result)) {
+      LOG_WARNING.printf("OpenXR acquire swapchain image failed: %s (%d).", VR_XrResultToString(result),
+                         static_cast<int>(result));
+      return false;
+    }
+
+    XrSwapchainImageWaitInfo wait_info{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
+    wait_info.timeout = XR_INFINITE_DURATION;
+    result = xrWaitSwapchainImage(swapchain.handle, &wait_info);
+    if (XR_FAILED(result)) {
+      LOG_WARNING.printf("OpenXR wait swapchain image failed: %s (%d).", VR_XrResultToString(result),
+                         static_cast<int>(result));
+      return false;
+    }
+
+    VR_CopyTextureToSwapchain(source_textures[eye], swapchain, image_index);
+
+    XrSwapchainImageReleaseInfo release_info{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
+    xrReleaseSwapchainImage(swapchain.handle, &release_info);
+
+    projection_views[eye].pose = Vr_views[eye].pose;
+    projection_views[eye].fov = Vr_views[eye].fov;
+    projection_views[eye].subImage.swapchain = swapchain.handle;
+    projection_views[eye].subImage.imageRect.offset = {0, 0};
+    projection_views[eye].subImage.imageRect.extent = {swapchain.width, swapchain.height};
+  }
+
+  XrCompositionLayerProjection projection_layer{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
+  projection_layer.space = Vr_app_space;
+  projection_layer.viewCount = 2;
+  projection_layer.views = projection_views;
+
+  const XrCompositionLayerBaseHeader *layers[] = {
+      reinterpret_cast<const XrCompositionLayerBaseHeader *>(&projection_layer)};
+
+  XrFrameEndInfo frame_end_info{XR_TYPE_FRAME_END_INFO};
+  frame_end_info.displayTime = frame_state.predictedDisplayTime;
+  frame_end_info.environmentBlendMode = Vr_blend_mode;
+  frame_end_info.layerCount = 1;
+  frame_end_info.layers = layers;
+
+  result = xrEndFrame(Vr_session, &frame_end_info);
+  if (XR_FAILED(result)) {
+    LOG_WARNING.printf("OpenXR end frame failed: %s (%d).", VR_XrResultToString(result), static_cast<int>(result));
+    return false;
+  }
+
+  return true;
+}
+
+
 
 } // namespace
 
@@ -661,14 +885,56 @@ void VR_InitFromCommandLine() {
     return;
   }
 
+#if !defined(__linux__)
+  LOG_WARNING << "OpenXR OpenGL graphics binding is only implemented for Linux in this build.";
+  Vr_enabled = false;
+  return;
+#else
+  std::vector<XrExtensionProperties> extensions;
+  uint32_t extension_count = 0;
+  XrResult result = xrEnumerateInstanceExtensionProperties(nullptr, 0, &extension_count, nullptr);
+  if (XR_FAILED(result) || extension_count == 0) {
+    LOG_WARNING.printf("OpenXR extension enumeration failed: %s (%d).", VR_XrResultToString(result),
+                       static_cast<int>(result));
+    Vr_enabled = false;
+    return;
+  }
+
+  extensions.assign(extension_count, {XR_TYPE_EXTENSION_PROPERTIES});
+  result = xrEnumerateInstanceExtensionProperties(nullptr, extension_count, &extension_count, extensions.data());
+  if (XR_FAILED(result)) {
+    LOG_WARNING.printf("OpenXR extension enumeration failed: %s (%d).", VR_XrResultToString(result),
+                       static_cast<int>(result));
+    Vr_enabled = false;
+    return;
+  }
+
+  bool has_opengl_enable = false;
+  for (const auto &ext : extensions) {
+    if (SDL_strcmp(ext.extensionName, XR_KHR_OPENGL_ENABLE_EXTENSION_NAME) == 0) {
+      has_opengl_enable = true;
+      break;
+    }
+  }
+
+  if (!has_opengl_enable) {
+    LOG_WARNING << "OpenXR runtime does not expose XR_KHR_opengl_enable; VR disabled.";
+    Vr_enabled = false;
+    return;
+  }
+
+  const char *enabled_extensions[] = {XR_KHR_OPENGL_ENABLE_EXTENSION_NAME};
+
   XrInstanceCreateInfo instance_info{XR_TYPE_INSTANCE_CREATE_INFO};
   SDL_strlcpy(instance_info.applicationInfo.applicationName, "Descent3", XR_MAX_APPLICATION_NAME_SIZE);
   instance_info.applicationInfo.applicationVersion = 1;
   SDL_strlcpy(instance_info.applicationInfo.engineName, "Descent3", XR_MAX_ENGINE_NAME_SIZE);
   instance_info.applicationInfo.engineVersion = 1;
   instance_info.applicationInfo.apiVersion = XR_CURRENT_API_VERSION;
+  instance_info.enabledExtensionCount = 1;
+  instance_info.enabledExtensionNames = enabled_extensions;
 
-  XrResult result = xrCreateInstance(&instance_info, &Vr_instance);
+  result = xrCreateInstance(&instance_info, &Vr_instance);
   if (XR_FAILED(result)) {
     LOG_WARNING.printf("OpenXR instance init failed: %s (%d). Ensure an OpenXR runtime is installed and selected.",
                        VR_XrResultToString(result), static_cast<int>(result));
@@ -688,16 +954,216 @@ void VR_InitFromCommandLine() {
     return;
   }
 
+  PFN_xrGetOpenGLGraphicsRequirementsKHR pfn_get_gl_requirements = nullptr;
+  result = xrGetInstanceProcAddr(Vr_instance, "xrGetOpenGLGraphicsRequirementsKHR",
+                                 reinterpret_cast<PFN_xrVoidFunction *>(&pfn_get_gl_requirements));
+  if (XR_FAILED(result) || pfn_get_gl_requirements == nullptr) {
+    LOG_WARNING.printf("OpenXR failed to load OpenGL requirements function: %s (%d).", VR_XrResultToString(result),
+                       static_cast<int>(result));
+    xrDestroyInstance(Vr_instance);
+    Vr_instance = XR_NULL_HANDLE;
+    Vr_system_id = XR_NULL_SYSTEM_ID;
+    Vr_enabled = false;
+    return;
+  }
+
+  XrGraphicsRequirementsOpenGLKHR gl_requirements{XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_KHR};
+  result = pfn_get_gl_requirements(Vr_instance, Vr_system_id, &gl_requirements);
+  if (XR_FAILED(result)) {
+    LOG_WARNING.printf("OpenXR OpenGL requirements query failed: %s (%d).", VR_XrResultToString(result),
+                       static_cast<int>(result));
+    xrDestroyInstance(Vr_instance);
+    Vr_instance = XR_NULL_HANDLE;
+    Vr_system_id = XR_NULL_SYSTEM_ID;
+    Vr_enabled = false;
+    return;
+  }
+
+  Display *x_display = glXGetCurrentDisplay();
+  GLXDrawable glx_drawable = glXGetCurrentDrawable();
+  GLXContext glx_context = glXGetCurrentContext();
+  if (!x_display || !glx_drawable || !glx_context) {
+    LOG_WARNING << "OpenXR session creation failed: no active OpenGL/GLX context.";
+    xrDestroyInstance(Vr_instance);
+    Vr_instance = XR_NULL_HANDLE;
+    Vr_system_id = XR_NULL_SYSTEM_ID;
+    Vr_enabled = false;
+    return;
+  }
+
+  XrGraphicsBindingOpenGLXlibKHR graphics_binding{XR_TYPE_GRAPHICS_BINDING_OPENGL_XLIB_KHR};
+  graphics_binding.xDisplay = x_display;
+  graphics_binding.glxDrawable = glx_drawable;
+  graphics_binding.glxContext = glx_context;
+
+  XrSessionCreateInfo session_info{XR_TYPE_SESSION_CREATE_INFO};
+  session_info.next = &graphics_binding;
+  session_info.systemId = Vr_system_id;
+  result = xrCreateSession(Vr_instance, &session_info, &Vr_session);
+  if (XR_FAILED(result)) {
+    LOG_WARNING.printf("OpenXR session creation failed: %s (%d).", VR_XrResultToString(result), static_cast<int>(result));
+    xrDestroyInstance(Vr_instance);
+    Vr_instance = XR_NULL_HANDLE;
+    Vr_system_id = XR_NULL_SYSTEM_ID;
+    Vr_enabled = false;
+    return;
+  }
+
+  XrReferenceSpaceCreateInfo space_info{XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
+  space_info.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
+  space_info.poseInReferenceSpace.orientation.w = 1.0f;
+  result = xrCreateReferenceSpace(Vr_session, &space_info, &Vr_app_space);
+  if (XR_FAILED(result)) {
+    space_info.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL;
+    result = xrCreateReferenceSpace(Vr_session, &space_info, &Vr_app_space);
+  }
+  if (XR_FAILED(result)) {
+    LOG_WARNING.printf("OpenXR reference space creation failed: %s (%d).", VR_XrResultToString(result),
+                       static_cast<int>(result));
+    VR_DestroyOpenXrSession();
+    xrDestroyInstance(Vr_instance);
+    Vr_instance = XR_NULL_HANDLE;
+    Vr_system_id = XR_NULL_SYSTEM_ID;
+    Vr_enabled = false;
+    return;
+  }
+
+  uint32_t view_count = 0;
+  result = xrEnumerateViewConfigurationViews(Vr_instance, Vr_system_id, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, 0,
+                                             &view_count, nullptr);
+  if (XR_FAILED(result) || view_count < 2) {
+    LOG_WARNING.printf("OpenXR view configuration query failed: %s (%d).", VR_XrResultToString(result),
+                       static_cast<int>(result));
+    VR_DestroyOpenXrSession();
+    xrDestroyInstance(Vr_instance);
+    Vr_instance = XR_NULL_HANDLE;
+    Vr_system_id = XR_NULL_SYSTEM_ID;
+    Vr_enabled = false;
+    return;
+  }
+  Vr_view_count = std::min<uint32_t>(2, view_count);
+
+  std::vector<XrViewConfigurationView> config_views(view_count, {XR_TYPE_VIEW_CONFIGURATION_VIEW});
+  result = xrEnumerateViewConfigurationViews(Vr_instance, Vr_system_id, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
+                                             view_count, &view_count, config_views.data());
+  if (XR_FAILED(result)) {
+    LOG_WARNING.printf("OpenXR view configuration query failed: %s (%d).", VR_XrResultToString(result),
+                       static_cast<int>(result));
+    VR_DestroyOpenXrSession();
+    xrDestroyInstance(Vr_instance);
+    Vr_instance = XR_NULL_HANDLE;
+    Vr_system_id = XR_NULL_SYSTEM_ID;
+    Vr_enabled = false;
+    return;
+  }
+
+  uint32_t format_count = 0;
+  result = xrEnumerateSwapchainFormats(Vr_session, 0, &format_count, nullptr);
+  if (XR_FAILED(result) || format_count == 0) {
+    LOG_WARNING.printf("OpenXR swapchain format query failed: %s (%d).", VR_XrResultToString(result),
+                       static_cast<int>(result));
+    VR_DestroyOpenXrSession();
+    xrDestroyInstance(Vr_instance);
+    Vr_instance = XR_NULL_HANDLE;
+    Vr_system_id = XR_NULL_SYSTEM_ID;
+    Vr_enabled = false;
+    return;
+  }
+
+  std::vector<int64_t> formats(format_count, 0);
+  result = xrEnumerateSwapchainFormats(Vr_session, format_count, &format_count, formats.data());
+  if (XR_FAILED(result)) {
+    LOG_WARNING.printf("OpenXR swapchain format query failed: %s (%d).", VR_XrResultToString(result),
+                       static_cast<int>(result));
+    VR_DestroyOpenXrSession();
+    xrDestroyInstance(Vr_instance);
+    Vr_instance = XR_NULL_HANDLE;
+    Vr_system_id = XR_NULL_SYSTEM_ID;
+    Vr_enabled = false;
+    return;
+  }
+
+  int64_t color_format = GL_RGBA8;
+  const int64_t preferred_formats[] = {GL_SRGB8_ALPHA8, GL_RGBA8};
+  for (int64_t preferred : preferred_formats) {
+    if (std::find(formats.begin(), formats.end(), preferred) != formats.end()) {
+      color_format = preferred;
+      break;
+    }
+  }
+
+  for (uint32_t eye = 0; eye < 2; ++eye) {
+    Vr_swapchains[eye].width = static_cast<int32_t>(config_views[eye].recommendedImageRectWidth);
+    Vr_swapchains[eye].height = static_cast<int32_t>(config_views[eye].recommendedImageRectHeight);
+
+    XrSwapchainCreateInfo swapchain_info{XR_TYPE_SWAPCHAIN_CREATE_INFO};
+    swapchain_info.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_SAMPLED_BIT;
+    swapchain_info.format = color_format;
+    swapchain_info.sampleCount = config_views[eye].recommendedSwapchainSampleCount;
+    swapchain_info.width = static_cast<uint32_t>(Vr_swapchains[eye].width);
+    swapchain_info.height = static_cast<uint32_t>(Vr_swapchains[eye].height);
+    swapchain_info.faceCount = 1;
+    swapchain_info.arraySize = 1;
+    swapchain_info.mipCount = 1;
+
+    result = xrCreateSwapchain(Vr_session, &swapchain_info, &Vr_swapchains[eye].handle);
+    if (XR_FAILED(result)) {
+      LOG_WARNING.printf("OpenXR swapchain creation failed: %s (%d).", VR_XrResultToString(result),
+                         static_cast<int>(result));
+      VR_DestroyOpenXrSession();
+      xrDestroyInstance(Vr_instance);
+      Vr_instance = XR_NULL_HANDLE;
+      Vr_system_id = XR_NULL_SYSTEM_ID;
+      Vr_enabled = false;
+      return;
+    }
+
+    uint32_t image_count = 0;
+    result = xrEnumerateSwapchainImages(Vr_swapchains[eye].handle, 0, &image_count, nullptr);
+    if (XR_FAILED(result) || image_count == 0) {
+      LOG_WARNING.printf("OpenXR swapchain image enumeration failed: %s (%d).", VR_XrResultToString(result),
+                         static_cast<int>(result));
+      VR_DestroyOpenXrSession();
+      xrDestroyInstance(Vr_instance);
+      Vr_instance = XR_NULL_HANDLE;
+      Vr_system_id = XR_NULL_SYSTEM_ID;
+      Vr_enabled = false;
+      return;
+    }
+
+    Vr_swapchains[eye].images.assign(image_count, {XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_KHR});
+    result = xrEnumerateSwapchainImages(Vr_swapchains[eye].handle, image_count, &image_count,
+                                        reinterpret_cast<XrSwapchainImageBaseHeader *>(Vr_swapchains[eye].images.data()));
+    if (XR_FAILED(result)) {
+      LOG_WARNING.printf("OpenXR swapchain image enumeration failed: %s (%d).", VR_XrResultToString(result),
+                         static_cast<int>(result));
+      VR_DestroyOpenXrSession();
+      xrDestroyInstance(Vr_instance);
+      Vr_instance = XR_NULL_HANDLE;
+      Vr_system_id = XR_NULL_SYSTEM_ID;
+      Vr_enabled = false;
+      return;
+    }
+  }
+
+  uint32_t blend_mode_count = 0;
+  result = xrEnumerateEnvironmentBlendModes(Vr_instance, Vr_system_id, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, 0,
+                                            &blend_mode_count, nullptr);
+  if (XR_SUCCEEDED(result) && blend_mode_count > 0) {
+    std::vector<XrEnvironmentBlendMode> blend_modes(blend_mode_count, XR_ENVIRONMENT_BLEND_MODE_OPAQUE);
+    result = xrEnumerateEnvironmentBlendModes(Vr_instance, Vr_system_id, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
+                                              blend_mode_count, &blend_mode_count, blend_modes.data());
+    if (XR_SUCCEEDED(result)) {
+      Vr_blend_mode = blend_modes[0];
+    }
+  }
+
+  Vr_submit_width = static_cast<uint32_t>(Vr_swapchains[0].width);
+  Vr_submit_height = static_cast<uint32_t>(Vr_swapchains[0].height);
   Vr_openxr_ready = true;
-
-  LOG_WARNING << "OpenXR initialized, but swapchain/session submission is not implemented yet; disabling VR to avoid black headset output.";
-  xrDestroyInstance(Vr_instance);
-  Vr_instance = XR_NULL_HANDLE;
-  Vr_system_id = XR_NULL_SYSTEM_ID;
-  Vr_openxr_ready = false;
-  Vr_enabled = false;
-  return;
-
+  VR_InitStereoFrustums();
+  LOG_INFO.printf("OpenXR enabled via -vr. Render target %ux%u.", Vr_submit_width, Vr_submit_height);
+#endif
 }
 
 bool VR_IsEnabled() {
@@ -756,6 +1222,7 @@ void VR_RenderMenuFrame() {
   // Blit the menu texture to the monitor window
   VR_BlitMenuTextureToWindow();
 
+  VR_SubmitOpenXrFrame(Vr_submit_left.texture, Vr_submit_right.texture);
 }
 
 void VR_SubmitStereoFrame(const NewBitmap &left, const NewBitmap &right) {
@@ -780,6 +1247,7 @@ void VR_SubmitStereoFrame(const NewBitmap &left, const NewBitmap &right) {
   VR_UpdateSubmitSurface(left, Vr_submit_left, false);
   VR_UpdateSubmitSurface(right, Vr_submit_right, false);
 
+  VR_SubmitOpenXrFrame(Vr_submit_left.texture, Vr_submit_right.texture);
 }
 
 void VR_ResetGraphicsResources() {
@@ -788,7 +1256,7 @@ void VR_ResetGraphicsResources() {
   }
 
   auto &gl = VR_GetGlFns();
-  
+
   VR_DeleteSubmitSurface(Vr_submit_left);
   VR_DeleteSubmitSurface(Vr_submit_right);
   Vr_submit_width = 0;
@@ -839,7 +1307,9 @@ void VR_Shutdown() {
     rend_UnregisterExternalTexture(Vr_menu_bitmap);
     Vr_menu_texture_registered = false;
   }
-  
+
+  VR_DestroyOpenXrSession();
+
   if (Vr_instance != XR_NULL_HANDLE) {
     xrDestroyInstance(Vr_instance);
     Vr_instance = XR_NULL_HANDLE;
