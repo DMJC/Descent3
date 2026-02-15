@@ -531,6 +531,7 @@ extern int max_one_second;
 
 void MainLoop() {
   int exit_game = 0;
+  bool vr_reinitialized_before_first_menu = false;
 
   while (!exit_game) {
     if (Dedicated_server && !(Function_mode == GAME_MODE || Function_mode == QUIT_MODE))
@@ -541,6 +542,15 @@ void MainLoop() {
       exit_game = 1;
       break;
     case MENU_MODE:
+      if (!vr_reinitialized_before_first_menu) {
+        vr_reinitialized_before_first_menu = true;
+
+        if (VR_IsEnabled()) {
+          LOG_INFO << "VR: Reinitializing OpenVR before loading the first menu.";
+          VR_Shutdown();
+          VR_InitFromCommandLine();
+        }
+      }
       exit_game = MainMenu();
       break;
     case RESTORE_GAME_MODE: // do special sequencing for load games.
