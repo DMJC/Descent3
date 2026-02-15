@@ -92,14 +92,6 @@ struct VrGlFns {
   CheckFramebufferStatusFn check_framebuffer_status = nullptr;
 };
 
-static int GetStereoProjectionCounterShiftPixels(int reference_width) {
-  if (!VR_IsStereoRendering() || reference_width <= 0) {
-    return 0;
-  }
-
-  return static_cast<int>(std::lround(-gTransformProjection[2][0] * (static_cast<float>(reference_width) * 0.5f)));
-}
-
 VrGlFns &VR_GetGlFns() {
   static VrGlFns fns;
   if (fns.loaded) {
@@ -454,25 +446,6 @@ void VR_DrawTestQuad(int texture_handle, float u_max, float v_max) {
   g3_DrawPoly(4, point_list, texture_handle);
 }
 
-// Helper function to render the 3D cinema screen for one eye
-// Call this ONCE during VR initialization (in VR_Init or similar)
-void VR_InitStereoFrustums() {
-  if (!Vr_system) return;
-  
-  g3StereoFrustum left_frustum, right_frustum;
-  
-  Vr_system->GetProjectionRaw(vr::Eye_Left, &left_frustum.left, &left_frustum.right,
-                               &left_frustum.top, &left_frustum.bottom);
-  Vr_system->GetProjectionRaw(vr::Eye_Right, &right_frustum.left, &right_frustum.right,
-                               &right_frustum.top, &right_frustum.bottom);
-  
-  LOG_INFO.printf("VR: Setting stereo frustums - Left(L=%f,R=%f,T=%f,B=%f) Right(L=%f,R=%f,T=%f,B=%f)",
-                  left_frustum.left, left_frustum.right, left_frustum.top, left_frustum.bottom,
-                  right_frustum.left, right_frustum.right, right_frustum.top, right_frustum.bottom);
-  
-  g3_SetStereoFrustum(&left_frustum, &right_frustum);
-}
-
 // Then in your render function:
 void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_offset, bool is_left_eye) {
   if (!VR_EnsureSubmitSurface(surface)) {
@@ -483,36 +456,29 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
     return;
   }
 
-  int render_width = Max_window_w;
-  int render_height = Max_window_h;
-  
-  StartFrame(0, 0, render_width, render_height);
+  StartFrame(0, 0, Max_window_w, Max_window_h);
   rend_ClearScreen(GR_BLACK);
 
-  // Convert pixel shift to world space offset
-  const float screen_distance = 5.0f;
-  const float screen_width_world = 6.0f; // Approximate width of cinema screen arc
-  float world_shift = 0.0f;
-  world_shift -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
-  
-  // Camera stays at its proper eye offset position
+  // Use the same stereo frame setup that in-game rendering uses to avoid
+  // per-eye projection/aspect mismatches.
+  constexpr float kVrMenuConvergenceDistance = 30.0f;
   vector camera_pos = eye_offset;
   matrix camera_orient = Identity_matrix;
-  float zoom = D3_DEFAULT_ZOOM;
-  
-  g3_StartFrame(&camera_pos, &camera_orient, zoom);
-  
-  float u_max = Vr_menu_texture_registered ? 1.0f : 
-                static_cast<float>(Vr_menu_width) / static_cast<float>(Vr_menu_texture_size);
-  float v_max = Vr_menu_texture_registered ? 1.0f : 
-                static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
-  
-  // MOVE THE GEOMETRY by applying world_shift
-  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, 120.0f, 5.0f, 3.0f, -world_shift);
+  g3_StartFrameStereo(&camera_pos, &camera_orient, D3_DEFAULT_ZOOM, is_left_eye, Vr_eye_separation,
+                      kVrMenuConvergenceDistance);
+
+  float u_max = Vr_menu_texture_registered ? 1.0f
+                                           : static_cast<float>(Vr_menu_width) / static_cast<float>(Vr_menu_texture_size);
+  float v_max = Vr_menu_texture_registered ? 1.0f
+                                           : static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size);
+
+  // Draw centered geometry. Stereo convergence comes from the stereo projection,
+  // not from an extra manual world-space shift.
+  VR_DrawCinemaScreen(Vr_menu_bitmap, u_max, v_max, 120.0f, 5.0f, 3.0f, 0.0f);
 
   g3_EndFrame();
   EndFrame();
-  
+
   auto screenshot = rend_Screenshot();
   if (screenshot && screenshot->getData()) {
     VR_UpdateSubmitSurface(*screenshot, surface, false);
@@ -589,7 +555,7 @@ void VR_InitFromCommandLine() {
 
     g3StereoFrustum left_frustum{left_l, left_r, -left_t, -left_b};
     g3StereoFrustum right_frustum{right_l, right_r, -right_t, -right_b};
-    g3_SetStereoFrustum(&right_frustum, &left_frustum);
+    g3_SetStereoFrustum(&left_frustum, &right_frustum);
   }
 
   if (Vr_openvr_ready) {
@@ -650,8 +616,6 @@ void VR_RenderMenuFrame() {
     vector right_eye_offset{right_eye_transform.m[0][3], 
                            right_eye_transform.m[1][3], 
                            right_eye_transform.m[2][3]};
-    int cx = 0;
-    cx -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
     VR_RenderCinemaScreenForEye(Vr_submit_left, left_eye_offset, true);
     VR_RenderCinemaScreenForEye(Vr_submit_right, right_eye_offset, false);
   } else {
@@ -669,8 +633,10 @@ void VR_RenderMenuFrame() {
     if (Vr_submit_left.texture != 0 && Vr_submit_right.texture != 0) {
       vr::Texture_t left_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_left.texture)),
                                     vr::TextureType_OpenGL, vr::ColorSpace_Auto};
+      vr::Texture_t right_texture = {reinterpret_cast<void *>(static_cast<uintptr_t>(Vr_submit_right.texture)),
+                                     vr::TextureType_OpenGL, vr::ColorSpace_Auto};
       vr::VRCompositor()->Submit(vr::Eye_Left, &left_texture);
-      vr::VRCompositor()->Submit(vr::Eye_Right, &left_texture);
+      vr::VRCompositor()->Submit(vr::Eye_Right, &right_texture);
     }
   }
 }
