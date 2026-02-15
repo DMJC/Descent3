@@ -446,25 +446,6 @@ void VR_DrawTestQuad(int texture_handle, float u_max, float v_max) {
   g3_DrawPoly(4, point_list, texture_handle);
 }
 
-// Helper function to render the 3D cinema screen for one eye
-// Call this ONCE during VR initialization (in VR_Init or similar)
-void VR_InitStereoFrustums() {
-  if (!Vr_system) return;
-  
-  g3StereoFrustum left_frustum, right_frustum;
-  
-  Vr_system->GetProjectionRaw(vr::Eye_Left, &left_frustum.left, &left_frustum.right,
-                               &left_frustum.top, &left_frustum.bottom);
-  Vr_system->GetProjectionRaw(vr::Eye_Right, &right_frustum.left, &right_frustum.right,
-                               &right_frustum.top, &right_frustum.bottom);
-  
-  LOG_INFO.printf("VR: Setting stereo frustums - Left(L=%f,R=%f,T=%f,B=%f) Right(L=%f,R=%f,T=%f,B=%f)",
-                  left_frustum.left, left_frustum.right, left_frustum.top, left_frustum.bottom,
-                  right_frustum.left, right_frustum.right, right_frustum.top, right_frustum.bottom);
-  
-  g3_SetStereoFrustum(&left_frustum, &right_frustum);
-}
-
 // Then in your render function:
 void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_offset, bool is_left_eye) {
   if (!VR_EnsureSubmitSurface(surface)) {
