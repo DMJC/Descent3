@@ -690,25 +690,14 @@ void VR_InitFromCommandLine() {
 
   Vr_openxr_ready = true;
 
-  uint32_t view_count = 0;
-  result = xrEnumerateViewConfigurationViews(Vr_instance, Vr_system_id, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
-                                             0, &view_count, nullptr);
-  if (XR_SUCCEEDED(result) && view_count > 0) {
-    std::vector<XrViewConfigurationView> views(view_count, {XR_TYPE_VIEW_CONFIGURATION_VIEW});
-    result = xrEnumerateViewConfigurationViews(Vr_instance, Vr_system_id, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
-                                               view_count, &view_count, views.data());
-    if (XR_SUCCEEDED(result)) {
-      Vr_submit_width = views[0].recommendedImageRectWidth;
-      Vr_submit_height = views[0].recommendedImageRectHeight;
-    }
-  }
-  VR_InitStereoFrustums();
+  LOG_WARNING << "OpenXR initialized, but swapchain/session submission is not implemented yet; disabling VR to avoid black headset output.";
+  xrDestroyInstance(Vr_instance);
+  Vr_instance = XR_NULL_HANDLE;
+  Vr_system_id = XR_NULL_SYSTEM_ID;
+  Vr_openxr_ready = false;
+  Vr_enabled = false;
+  return;
 
-  if (Vr_openxr_ready) {
-    const uint32_t target_w = Vr_submit_width == 0 ? kDefaultVrTargetWidth : Vr_submit_width;
-    const uint32_t target_h = Vr_submit_height == 0 ? kDefaultVrTargetHeight : Vr_submit_height;
-    LOG_INFO.printf("OpenXR enabled via -vr. Recommended render target %ux%u.", target_w, target_h);
-  }
 }
 
 bool VR_IsEnabled() {
