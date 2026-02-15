@@ -35,6 +35,8 @@
 #define XR_USE_GRAPHICS_API_OPENGL
 #if defined(__linux__)
 #define XR_USE_PLATFORM_XLIB
+#include <X11/Xlib.h>
+#include <GL/glx.h>
 #endif
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
@@ -42,9 +44,6 @@
 #include "vecmat.h"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_opengl.h>
-#if defined(__linux__)
-#include <GL/glx.h>
-#endif
 
 namespace {
 bool Vr_enabled = false;
@@ -544,53 +543,6 @@ void VR_DrawCinemaScreen(int texture_handle, float u_max, float v_max, float arc
   }
 }
 
-void VR_DrawTestQuad(int texture_handle, float u_max, float v_max) {
-  constexpr float width = 3.0f;
-  constexpr float height = 2.25f;  // 4:3 aspect ratio
-  constexpr float distance = 5.0f;
-  
-  // Quad in front of camera, camera looks down -Z
-  vector p0{-width/2, height/2, -distance};
-  vector p1{width/2, height/2, -distance};
-  vector p2{width/2, -height/2, -distance};
-  vector p3{-width/2, -height/2, -distance};
-
-  g3Point points[4];
-  g3Point *point_list[4] = {&points[0], &points[1], &points[2], &points[3]};
-
-  g3_RotatePoint(&points[0], &p0);
-  g3_RotatePoint(&points[1], &p1);
-  g3_RotatePoint(&points[2], &p2);
-  g3_RotatePoint(&points[3], &p3);
-  
-  LOG_INFO.printf("VR: Transformed points - p0=(%f,%f,%f) p1=(%f,%f,%f)", 
-                  points[0].p3_sx, points[0].p3_sy, points[0].p3_z,
-                  points[1].p3_sx, points[1].p3_sy, points[1].p3_z);
-
-  // Set texture coordinates with V flipped
-  points[0].p3_flags |= PF_UV;
-  points[1].p3_flags |= PF_UV;
-  points[2].p3_flags |= PF_UV;
-  points[3].p3_flags |= PF_UV;
-
-  points[0].p3_u = 0.0f;
-  points[0].p3_v = v_max;
-  points[1].p3_u = u_max;
-  points[1].p3_v = v_max;
-  points[2].p3_u = u_max;
-  points[2].p3_v = 0.0f;
-  points[3].p3_u = 0.0f;
-  points[3].p3_v = 0.0f;
-
-  rend_SetZBufferState(0);
-  rend_SetTextureType(TT_LINEAR);
-  rend_SetLighting(LS_NONE);
-  rend_SetAlphaType(AT_CONSTANT_TEXTURE);
-  rend_SetAlphaValue(255);
-  
-  g3_DrawPoly(4, point_list, texture_handle);
-}
-
 // Helper function to render the 3D cinema screen for one eye
 // Call this ONCE during VR initialization (in VR_Init or similar)
 void VR_InitStereoFrustums() {
@@ -628,8 +580,6 @@ void VR_RenderCinemaScreenForEye(VrSubmitSurface &surface, const vector &eye_off
   rend_ClearScreen(GR_BLACK);
 
   // Convert pixel shift to world space offset
-  const float screen_distance = 5.0f;
-  const float screen_width_world = 6.0f; // Approximate width of cinema screen arc
   float world_shift = 0.0f;
   world_shift -= GetStereoProjectionCounterShiftPixels(FIXED_SCREEN_WIDTH);
   
@@ -993,6 +943,8 @@ void VR_InitFromCommandLine() {
 
   XrGraphicsBindingOpenGLXlibKHR graphics_binding{XR_TYPE_GRAPHICS_BINDING_OPENGL_XLIB_KHR};
   graphics_binding.xDisplay = x_display;
+  graphics_binding.visualid = 0;
+  graphics_binding.glxFBConfig = nullptr;
   graphics_binding.glxDrawable = glx_drawable;
   graphics_binding.glxContext = glx_context;
 
