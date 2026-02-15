@@ -46,7 +46,6 @@ XrSystemId Vr_system_id = XR_NULL_SYSTEM_ID;
 float Vr_eye_separation = 0.064f;
 uint32_t Vr_submit_width = 0;
 uint32_t Vr_submit_height = 0;
-bool Vr_submit_warning_logged = false;
 struct VrSubmitSurface {
   GLuint texture = 0;
   std::vector<uint32_t> buffer;
@@ -768,10 +767,6 @@ void VR_RenderMenuFrame() {
   // Blit the menu texture to the monitor window
   VR_BlitMenuTextureToWindow();
 
-  if (Vr_openxr_ready && !Vr_submit_warning_logged) {
-    LOG_WARNING << "OpenXR runtime initialized, but frame submission is not wired to an OpenXR swapchain yet.";
-    Vr_submit_warning_logged = true;
-  }
 }
 
 void VR_SubmitStereoFrame(const NewBitmap &left, const NewBitmap &right) {
@@ -796,10 +791,6 @@ void VR_SubmitStereoFrame(const NewBitmap &left, const NewBitmap &right) {
   VR_UpdateSubmitSurface(left, Vr_submit_left, false);
   VR_UpdateSubmitSurface(right, Vr_submit_right, false);
 
-  if (Vr_openxr_ready && !Vr_submit_warning_logged) {
-    LOG_WARNING << "OpenXR runtime initialized, but frame submission is not wired to an OpenXR swapchain yet.";
-    Vr_submit_warning_logged = true;
-  }
 }
 
 void VR_ResetGraphicsResources() {
@@ -866,6 +857,5 @@ void VR_Shutdown() {
   }
   Vr_system_id = XR_NULL_SYSTEM_ID;
   Vr_openxr_ready = false;
-  Vr_submit_warning_logged = false;
   Vr_enabled = false;
 }
