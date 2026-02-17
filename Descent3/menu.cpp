@@ -677,6 +677,7 @@
 #include "cinematics.h"
 #include "multi_dll_mgr.h"
 #include "newui_core.h"
+#include "vr.h"
 
 #ifdef _WIN32
 #define USE_DIRECTPLAY
@@ -814,7 +815,14 @@ int MainMenu() {
       PlayerResetShipPermissions(-1, true);
       if (MenuNewGame()) {
         exit_menu = 1;
+        if (VR_IsEnabled()) {
+          VR_BeginMenuFramebufferRender();
+        }
         MenuScene();
+        if (VR_IsEnabled()) {
+          VR_EndMenuFramebufferRender();
+          VR_RenderMenuFrame();
+        }
         rend_Flip();
       }
       break;
