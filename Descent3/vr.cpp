@@ -56,6 +56,7 @@ int Vr_menu_texture_size = 0;
 bool Vr_menu_texture_registered = false;
 bool Vr_menu_fbo_support_missing_logged = false;
 bool Vr_curved_menu_unavailable_logged = false;
+bool Vr_menu_submit_path_logged = false;
 bool Vr_ipd_logged = false;
 uint32_t Vr_submit_frame_counter = 0;
 
@@ -413,7 +414,10 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
   }
 
   gl.viewport(0, 0, static_cast<GLsizei>(Vr_submit_width), static_cast<GLsizei>(Vr_submit_height));
-  gl.clear_color(0.f, 0.f, 0.f, 1.f);
+  // Keep the render target visibly non-black while debugging the curved menu path.
+  // If the headset still appears black with this, the issue is in submit/runtime/display,
+  // not merely menu texturing.
+  gl.clear_color(1.f, 0.f, 1.f, 1.f);
   gl.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
   gl.disable(GL_DEPTH_TEST);
@@ -613,6 +617,12 @@ void VR_RenderMenuFrame() {
     right_curved = VR_RenderCurvedMenuToSurface(Vr_submit_right, 0.5f * Vr_eye_separation);
   }
 
+  if (!Vr_menu_submit_path_logged) {
+    LOG_INFO.printf("VR menu submit path: curved_left=%d curved_right=%d submit_fbo=%u eye_sep=%.3fmm", left_curved ? 1 : 0,
+                    right_curved ? 1 : 0, static_cast<unsigned int>(Vr_submit_fbo), Vr_eye_separation * 1000.0f);
+    Vr_menu_submit_path_logged = true;
+  }
+
   if (!left_curved || !right_curved) {
     if (!Vr_curved_menu_unavailable_logged) {
       LOG_WARNING << "VR: Curved menu render path unavailable; falling back to flat menu submit.";
@@ -659,6 +669,7 @@ void VR_ResetGraphicsResources() {
   auto &gl = VR_GetGlFns();
   VR_DeleteSubmitSurface(Vr_submit_left);
   VR_DeleteSubmitSurface(Vr_submit_right);
+  Vr_menu_submit_path_logged = false;
 
   if (Vr_menu_fbo != 0 && gl.delete_framebuffers) gl.delete_framebuffers(1, &Vr_menu_fbo);
   if (Vr_submit_fbo != 0 && gl.delete_framebuffers) gl.delete_framebuffers(1, &Vr_submit_fbo);
