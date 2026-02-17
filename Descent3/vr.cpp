@@ -83,6 +83,7 @@ struct VrGlFns {
   using LoadIdentityFn = decltype(&glLoadIdentity);
   using FrustumFn = decltype(&glFrustum);
   using TranslatefFn = decltype(&glTranslatef);
+  using Color4fFn = decltype(&glColor4f);
   using BeginFn = decltype(&glBegin);
   using EndFn = decltype(&glEnd);
   using TexCoord2fFn = decltype(&glTexCoord2f);
@@ -112,6 +113,7 @@ struct VrGlFns {
   LoadIdentityFn load_identity = nullptr;
   FrustumFn frustum = nullptr;
   TranslatefFn translatef = nullptr;
+  Color4fFn color4f = nullptr;
   BeginFn begin = nullptr;
   EndFn end = nullptr;
   TexCoord2fFn tex_coord2f = nullptr;
@@ -176,6 +178,7 @@ VrGlFns &VR_GetGlFns() {
   fns.load_identity = reinterpret_cast<VrGlFns::LoadIdentityFn>(load_proc("glLoadIdentity"));
   fns.frustum = reinterpret_cast<VrGlFns::FrustumFn>(load_proc("glFrustum"));
   fns.translatef = reinterpret_cast<VrGlFns::TranslatefFn>(load_proc("glTranslatef"));
+  fns.color4f = reinterpret_cast<VrGlFns::Color4fFn>(load_proc("glColor4f"));
   fns.begin = reinterpret_cast<VrGlFns::BeginFn>(load_proc("glBegin"));
   fns.end = reinterpret_cast<VrGlFns::EndFn>(load_proc("glEnd"));
   fns.tex_coord2f = reinterpret_cast<VrGlFns::TexCoord2fFn>(load_proc("glTexCoord2f"));
@@ -358,15 +361,15 @@ bool VR_SubmitOpenVrFrame(GLuint left_texture, GLuint right_texture) {
 }
 
 bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offset) {
-  if (surface.texture == 0 || Vr_menu_fbo_texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
+  if (surface.texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
     return false;
   }
 
   auto &gl = VR_GetGlFns();
   if (!gl.bind_framebuffer || !gl.framebuffer_texture_2d || !gl.viewport || !gl.check_framebuffer_status ||
       !gl.clear_color || !gl.clear || !gl.disable || !gl.enable || !gl.matrix_mode || !gl.push_matrix ||
-      !gl.pop_matrix || !gl.load_identity || !gl.frustum || !gl.translatef || !gl.begin || !gl.end ||
-      !gl.tex_coord2f || !gl.vertex3f || !gl.bind_texture) {
+      !gl.pop_matrix || !gl.load_identity || !gl.frustum || !gl.translatef || !gl.color4f || !gl.begin ||
+      !gl.end || !gl.vertex3f) {
     return false;
   }
 
@@ -382,7 +385,7 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
 
   gl.disable(GL_DEPTH_TEST);
   gl.disable(GL_CULL_FACE);
-  gl.enable(GL_TEXTURE_2D);
+  gl.disable(GL_TEXTURE_2D);
 
   gl.matrix_mode(GL_PROJECTION);
   gl.push_matrix();
@@ -405,7 +408,7 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
   const float screen_height = 1.15f;
   const int segments = 64;
 
-  gl.bind_texture(GL_TEXTURE_2D, Vr_menu_fbo_texture);
+  gl.color4f(1.0f, 1.0f, 1.0f, 1.0f);
   gl.begin(GL_QUAD_STRIP);
   for (int i = 0; i <= segments; ++i) {
     const float t = static_cast<float>(i) / static_cast<float>(segments);
@@ -413,9 +416,7 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
     const float x = std::sin(angle) * radius;
     const float z = (std::cos(angle) * radius) - radius;
 
-    gl.tex_coord2f(t, 1.0f);
     gl.vertex3f(x, screen_height * 0.5f, z);
-    gl.tex_coord2f(t, 0.0f);
     gl.vertex3f(x, -screen_height * 0.5f, z);
   }
   gl.end();
@@ -553,9 +554,6 @@ void VR_RenderMenuFrame() {
   }
 
   VR_EnsureMenuBitmap();
-  if (Vr_menu_fbo_texture == 0) {
-    return;
-  }
 
   if (!VR_EnsureSubmitSurface(Vr_submit_left) || !VR_EnsureSubmitSurface(Vr_submit_right)) {
     return;
