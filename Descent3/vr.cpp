@@ -48,6 +48,7 @@ VrSubmitSurface Vr_submit_left;
 VrSubmitSurface Vr_submit_right;
 GLuint Vr_menu_fbo = 0;
 GLuint Vr_menu_fbo_texture = 0;
+GLuint Vr_submit_fbo = 0;
 int Vr_menu_bitmap = -1;
 int Vr_menu_width = 0;
 int Vr_menu_height = 0;
@@ -313,6 +314,72 @@ bool VR_SubmitOpenVrFrame(GLuint left_texture, GLuint right_texture) {
   return left_err == vr::VRCompositorError_None && right_err == vr::VRCompositorError_None;
 }
 
+void VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offset) {
+  if (surface.texture == 0 || Vr_menu_fbo_texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
+    return;
+  }
+
+  auto &gl = VR_GetGlFns();
+  if (!gl.bind_framebuffer || !gl.framebuffer_texture_2d || !gl.viewport || !gl.check_framebuffer_status) {
+    return;
+  }
+
+  gl.bind_framebuffer(GL_FRAMEBUFFER, Vr_submit_fbo);
+  gl.framebuffer_texture_2d(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, surface.texture, 0);
+  if (gl.check_framebuffer_status(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    return;
+  }
+
+  gl.viewport(0, 0, static_cast<GLsizei>(Vr_submit_width), static_cast<GLsizei>(Vr_submit_height));
+  glClearColor(0.f, 0.f, 0.f, 1.f);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+  glDisable(GL_DEPTH_TEST);
+  glDisable(GL_CULL_FACE);
+  glEnable(GL_TEXTURE_2D);
+
+  glMatrixMode(GL_PROJECTION);
+  glPushMatrix();
+  glLoadIdentity();
+  const float near_plane = 0.1f;
+  const float far_plane = 10.0f;
+  const float top = near_plane;
+  const float right = top * (static_cast<float>(Vr_submit_width) / static_cast<float>(Vr_submit_height));
+  glFrustum(-right, right, -top, top, near_plane, far_plane);
+
+  glMatrixMode(GL_MODELVIEW);
+  glPushMatrix();
+  glLoadIdentity();
+
+  const float menu_distance = 1.25f;
+  glTranslatef(-eye_offset, 0.0f, -menu_distance);
+
+  const float radius = 1.15f;
+  const float arc_half_angle = 0.85f;
+  const float screen_height = 1.15f;
+  const int segments = 64;
+
+  glBindTexture(GL_TEXTURE_2D, Vr_menu_fbo_texture);
+  glBegin(GL_QUAD_STRIP);
+  for (int i = 0; i <= segments; ++i) {
+    const float t = static_cast<float>(i) / static_cast<float>(segments);
+    const float angle = (t * 2.0f - 1.0f) * arc_half_angle;
+    const float x = std::sin(angle) * radius;
+    const float z = (std::cos(angle) * radius) - radius;
+
+    glTexCoord2f(t, 1.0f);
+    glVertex3f(x, screen_height * 0.5f, z);
+    glTexCoord2f(t, 0.0f);
+    glVertex3f(x, -screen_height * 0.5f, z);
+  }
+  glEnd();
+
+  glPopMatrix();
+  glMatrixMode(GL_PROJECTION);
+  glPopMatrix();
+  glMatrixMode(GL_MODELVIEW);
+}
+
 void VR_InitStereoFrustums() {
   if (!Vr_openvr_ready || Vr_system == nullptr) {
     return;
@@ -432,16 +499,18 @@ void VR_RenderMenuFrame() {
   }
 
   auto &gl = VR_GetGlFns();
-  if (gl.bind_texture && gl.copy_tex_sub_image_2d && gl.bind_framebuffer) {
-    // Copy from the dedicated menu framebuffer texture instead of the default
-    // window backbuffer. In VR mode the menu FBO is often much larger than the
-    // swapchain image, and reading from the wrong source can produce heavily
-    // corrupted output in the headset.
-    gl.bind_framebuffer(GL_FRAMEBUFFER, Vr_menu_fbo);
-    gl.bind_texture(GL_TEXTURE_2D, Vr_submit_left.texture);
-    gl.copy_tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, 0, 0, Vr_submit_width, Vr_submit_height);
-    gl.bind_texture(GL_TEXTURE_2D, Vr_submit_right.texture);
-    gl.copy_tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, 0, 0, Vr_submit_width, Vr_submit_height);
+  if (Vr_submit_fbo == 0 && gl.gen_framebuffers) {
+    gl.gen_framebuffers(1, &Vr_submit_fbo);
+  }
+
+  if (Vr_submit_fbo == 0) {
+    return;
+  }
+
+  VR_RenderCurvedMenuToSurface(Vr_submit_left, -0.5f * Vr_eye_separation);
+  VR_RenderCurvedMenuToSurface(Vr_submit_right, 0.5f * Vr_eye_separation);
+
+  if (gl.bind_framebuffer) {
     gl.bind_framebuffer(GL_FRAMEBUFFER, 0);
   }
 
@@ -468,8 +537,10 @@ void VR_ResetGraphicsResources() {
   VR_DeleteSubmitSurface(Vr_submit_right);
 
   if (Vr_menu_fbo != 0 && gl.delete_framebuffers) gl.delete_framebuffers(1, &Vr_menu_fbo);
+  if (Vr_submit_fbo != 0 && gl.delete_framebuffers) gl.delete_framebuffers(1, &Vr_submit_fbo);
   if (Vr_menu_fbo_texture != 0 && gl.delete_textures) gl.delete_textures(1, &Vr_menu_fbo_texture);
   Vr_menu_fbo = 0;
+  Vr_submit_fbo = 0;
   Vr_menu_fbo_texture = 0;
 
   if (Vr_menu_bitmap >= 0) {
