@@ -83,7 +83,6 @@ struct VrGlFns {
   using LoadIdentityFn = decltype(&glLoadIdentity);
   using FrustumFn = decltype(&glFrustum);
   using TranslatefFn = decltype(&glTranslatef);
-  using Color4fFn = decltype(&glColor4f);
   using BeginFn = decltype(&glBegin);
   using EndFn = decltype(&glEnd);
   using TexCoord2fFn = decltype(&glTexCoord2f);
@@ -113,7 +112,6 @@ struct VrGlFns {
   LoadIdentityFn load_identity = nullptr;
   FrustumFn frustum = nullptr;
   TranslatefFn translatef = nullptr;
-  Color4fFn color4f = nullptr;
   BeginFn begin = nullptr;
   EndFn end = nullptr;
   TexCoord2fFn tex_coord2f = nullptr;
@@ -178,7 +176,6 @@ VrGlFns &VR_GetGlFns() {
   fns.load_identity = reinterpret_cast<VrGlFns::LoadIdentityFn>(load_proc("glLoadIdentity"));
   fns.frustum = reinterpret_cast<VrGlFns::FrustumFn>(load_proc("glFrustum"));
   fns.translatef = reinterpret_cast<VrGlFns::TranslatefFn>(load_proc("glTranslatef"));
-  fns.color4f = reinterpret_cast<VrGlFns::Color4fFn>(load_proc("glColor4f"));
   fns.begin = reinterpret_cast<VrGlFns::BeginFn>(load_proc("glBegin"));
   fns.end = reinterpret_cast<VrGlFns::EndFn>(load_proc("glEnd"));
   fns.tex_coord2f = reinterpret_cast<VrGlFns::TexCoord2fFn>(load_proc("glTexCoord2f"));
@@ -261,6 +258,27 @@ void VR_UpdateSubmitSurface(const NewBitmap &screenshot, VrSubmitSurface &surfac
 
   gl.bind_texture(GL_TEXTURE_2D, surface.texture);
   gl.tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, Vr_submit_width, Vr_submit_height, GL_RGBA, GL_UNSIGNED_BYTE, surface.buffer.data());
+}
+
+bool VR_FillSubmitSurfaceSolidColor(VrSubmitSurface &surface, uint32_t rgba_color) {
+  if (surface.texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
+    return false;
+  }
+
+  auto &gl = VR_GetGlFns();
+  if (!gl.bind_texture || !gl.tex_sub_image_2d) {
+    return false;
+  }
+
+  if (surface.buffer.size() != static_cast<size_t>(Vr_submit_width * Vr_submit_height)) {
+    surface.buffer.assign(static_cast<size_t>(Vr_submit_width * Vr_submit_height), rgba_color);
+  } else {
+    std::fill(surface.buffer.begin(), surface.buffer.end(), rgba_color);
+  }
+
+  gl.bind_texture(GL_TEXTURE_2D, surface.texture);
+  gl.tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, Vr_submit_width, Vr_submit_height, GL_RGBA, GL_UNSIGNED_BYTE, surface.buffer.data());
+  return true;
 }
 
 void VR_EnsureMenuBitmap() {
@@ -368,8 +386,8 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
   auto &gl = VR_GetGlFns();
   if (!gl.bind_framebuffer || !gl.framebuffer_texture_2d || !gl.viewport || !gl.check_framebuffer_status ||
       !gl.clear_color || !gl.clear || !gl.disable || !gl.enable || !gl.matrix_mode || !gl.push_matrix ||
-      !gl.pop_matrix || !gl.load_identity || !gl.frustum || !gl.translatef || !gl.color4f || !gl.begin ||
-      !gl.end || !gl.vertex3f) {
+      !gl.pop_matrix || !gl.load_identity || !gl.frustum || !gl.translatef || !gl.begin || !gl.end ||
+      !gl.vertex3f) {
     return false;
   }
 
@@ -408,7 +426,6 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
   const float screen_height = 1.15f;
   const int segments = 64;
 
-  gl.color4f(1.0f, 1.0f, 1.0f, 1.0f);
   gl.begin(GL_QUAD_STRIP);
   for (int i = 0; i <= segments; ++i) {
     const float t = static_cast<float>(i) / static_cast<float>(segments);
@@ -579,9 +596,16 @@ void VR_RenderMenuFrame() {
     }
 
     if (!VR_CopyMenuToSubmitSurface(Vr_submit_left) || !VR_CopyMenuToSubmitSurface(Vr_submit_right)) {
+      LOG_WARNING << "VR: Menu copy path unavailable; submitting solid debug color frame.";
+
+      VR_FillSubmitSurfaceSolidColor(Vr_submit_left, 0xFFFF00FFu);
+      VR_FillSubmitSurfaceSolidColor(Vr_submit_right, 0xFFFF00FFu);
+
       if (gl.bind_framebuffer) {
         gl.bind_framebuffer(GL_FRAMEBUFFER, 0);
       }
+
+      VR_SubmitOpenVrFrame(Vr_submit_left.texture, Vr_submit_right.texture);
       return;
     }
   }
