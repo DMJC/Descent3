@@ -282,11 +282,23 @@ bool VR_SubmitOpenVrFrame(GLuint left_texture, GLuint right_texture) {
     return false;
   }
 
+  vr::TrackedDevicePose_t tracked_device_pose[vr::k_unMaxTrackedDeviceCount]{};
+  const auto wait_err = Vr_compositor->WaitGetPoses(tracked_device_pose, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
+  if (wait_err != vr::VRCompositorError_None) {
+    LOG_WARNING.printf("OpenVR WaitGetPoses failed with error code %d", static_cast<int>(wait_err));
+    return false;
+  }
+
   vr::Texture_t left = {reinterpret_cast<void *>(static_cast<uintptr_t>(left_texture)), vr::TextureType_OpenGL, vr::ColorSpace_Gamma};
   vr::Texture_t right = {reinterpret_cast<void *>(static_cast<uintptr_t>(right_texture)), vr::TextureType_OpenGL, vr::ColorSpace_Gamma};
 
   const auto left_err = Vr_compositor->Submit(vr::Eye_Left, &left);
   const auto right_err = Vr_compositor->Submit(vr::Eye_Right, &right);
+
+  if (left_err != vr::VRCompositorError_None || right_err != vr::VRCompositorError_None) {
+    LOG_WARNING.printf("OpenVR Submit failed: left=%d right=%d", static_cast<int>(left_err), static_cast<int>(right_err));
+  }
+
   Vr_compositor->PostPresentHandoff();
 
   return left_err == vr::VRCompositorError_None && right_err == vr::VRCompositorError_None;
