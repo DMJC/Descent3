@@ -86,6 +86,7 @@ struct VrGlFns {
   using LoadIdentityFn = decltype(&glLoadIdentity);
   using FrustumFn = decltype(&glFrustum);
   using TranslatefFn = decltype(&glTranslatef);
+  using Color4fFn = decltype(&glColor4f);
   using BeginFn = decltype(&glBegin);
   using EndFn = decltype(&glEnd);
   using TexCoord2fFn = decltype(&glTexCoord2f);
@@ -115,6 +116,7 @@ struct VrGlFns {
   LoadIdentityFn load_identity = nullptr;
   FrustumFn frustum = nullptr;
   TranslatefFn translatef = nullptr;
+  Color4fFn color4f = nullptr;
   BeginFn begin = nullptr;
   EndFn end = nullptr;
   TexCoord2fFn tex_coord2f = nullptr;
@@ -179,6 +181,7 @@ VrGlFns &VR_GetGlFns() {
   fns.load_identity = reinterpret_cast<VrGlFns::LoadIdentityFn>(load_proc("glLoadIdentity"));
   fns.frustum = reinterpret_cast<VrGlFns::FrustumFn>(load_proc("glFrustum"));
   fns.translatef = reinterpret_cast<VrGlFns::TranslatefFn>(load_proc("glTranslatef"));
+  fns.color4f = reinterpret_cast<VrGlFns::Color4fFn>(load_proc("glColor4f"));
   fns.begin = reinterpret_cast<VrGlFns::BeginFn>(load_proc("glBegin"));
   fns.end = reinterpret_cast<VrGlFns::EndFn>(load_proc("glEnd"));
   fns.tex_coord2f = reinterpret_cast<VrGlFns::TexCoord2fFn>(load_proc("glTexCoord2f"));
@@ -450,7 +453,9 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
 
   // Explicitly set draw color for the untextured debug geometry so it remains
   // visible even if prior engine state changed the current GL color.
-  glColor4f(1.0f, 1.0f, 0.0f, 1.0f);
+  if (gl.color4f) {
+    gl.color4f(1.0f, 1.0f, 0.0f, 1.0f);
+  }
 
   gl.begin(GL_QUAD_STRIP);
   for (int i = 0; i <= segments; ++i) {
