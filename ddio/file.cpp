@@ -22,7 +22,7 @@
 #include <fstream>
 #include <iterator>
 #include <regex>
-#include <SDL3/SDL_filesystem.h>
+#include <SDL2/SDL_filesystem.h>
 
 #include "IOOps.h"
 #include "chrono_timer.h"

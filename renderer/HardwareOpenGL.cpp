@@ -26,7 +26,7 @@
 
 // TODO: Use SDL_FunctionPointer properly instead
 #define SDL_FUNCTION_POINTER_IS_VOID_POINTER
-#include <SDL3/SDL.h>
+#include <SDL2/SDL.h>
 
 #if defined(WIN32)
 #include <windows.h>
@@ -418,30 +418,16 @@ int opengl_Setup(oeApplication *app, const int *width, const int *height) {
     int display_arg = FindArg("-display");
     int display_count = 0;
 
-    // High-DPI support
-    {
-      float scale = SDL_GetDisplayContentScale(Display_id);
-      LOG_WARNING.printf("Using content scale %f", scale);
-      winw = std::floor(static_cast<float>(winw) * scale);
-      winh = std::floor(static_cast<float>(winh) * scale);
-    }
-
-    SDL_PropertiesID props = SDL_CreateProperties();
-    SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, "Descent 3");
-    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER, SDL_WINDOWPOS_UNDEFINED_DISPLAY(Display_id));
-    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_Y_NUMBER, SDL_WINDOWPOS_UNDEFINED_DISPLAY(Display_id));
-    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, winw);
-    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, winh);
-    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_FLAGS_NUMBER, SDL_WINDOW_OPENGL);
-    GSDLWindow = SDL_CreateWindowWithProperties(props);
-    SDL_DestroyProperties(props);
+    GSDLWindow = SDL_CreateWindow("Descent 3", SDL_WINDOWPOS_UNDEFINED_DISPLAY(Display_id),
+                                  SDL_WINDOWPOS_UNDEFINED_DISPLAY(Display_id), winw, winh,
+                                  SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
     if (!GSDLWindow) {
       LOG_ERROR.printf("OpenGL: SDL window creation failed: %s", SDL_GetError());
       return 0;
     }
 
     bool grabMouse = FindArgChar("-nomousegrab", 'm') == 0;
-    SDL_SetWindowRelativeMouseMode(GSDLWindow, grabMouse);
+    SDL_SetRelativeMouseMode(grabMouse ? SDL_TRUE : SDL_FALSE);
 
     rend_SetFullScreen(Game_fullscreen);
   } else if (!Game_fullscreen) {

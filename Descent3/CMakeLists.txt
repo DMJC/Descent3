@@ -320,7 +320,7 @@ file(GLOB_RECURSE INCS "../lib/*.h")
 
 add_executable(Descent3 WIN32 MACOSX_BUNDLE ${D3Icon} ${HEADERS} ${CPPS} ${INCS} ${MANIFEST} ${RC_FILE})
 target_link_libraries(Descent3 PRIVATE
-  SDL3::SDL3
+  SDL2::SDL2
   2dlib
   AudioEncode
   bitmap
@@ -353,7 +353,7 @@ target_link_libraries(Descent3 PRIVATE
   unzip
   vecmat
   ${PLATFORM_LIBS})
-target_include_directories(Descent3 PRIVATE ${PROJECT_BINARY_DIR}/lib ${SDL3_INCLUDE_DIRS})
+target_include_directories(Descent3 PRIVATE ${PROJECT_BINARY_DIR}/lib ${SDL2_INCLUDE_DIRS})
 target_link_options(Descent3 PRIVATE $<$<PLATFORM_ID:Windows>:/DEBUG:FULL>)
 set_target_properties(Descent3 PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/build")
 add_dependencies(Descent3

@@ -3,7 +3,7 @@
 
 ## Dependencies
 The build process uses [**CMake**](https://cmake.org/) and, by default, [**Ninja**](https://ninja-build.org/). You must install these; the project cannot locate them for you. The source code also depends on third-party libraries that are not provided as part of the repository:
-- [**SDL3**](https://wiki.libsdl.org/SDL3/FrontPage) which is used as the base to handle video, audio and input.
+- [**SDL2**](https://wiki.libsdl.org/SDL2/FrontPage) which is used as the base to handle video, audio and input.
 - [**cpp-httplib**](https://github.com/yhirose/cpp-httplib) as a HTTP client to download levels.
 - [**glm**](https://github.com/g-truc/glm) providing useful additions to OpenGL.
 - [**plog**](https://github.com/SergiusTheBest/plog) for logging
@@ -143,7 +143,7 @@ Once CMake finishes, the built files will be put in `builds/mac/build/Debug` or 
                 ```sh
                 sudo dnf install -y autoconf automake libtool perl-open perl-FindBin python-jinja2 libX11-devel libXft-devel libXext-devel wayland-devel libxkbcommon-devel mesa-libEGL-devel ibus-devel alsa-lib-devel pulseaudio-libs-devel
                 ```
-    * If you would like to manage the code dependencies yourself, install libraries and headers for the dependencies listed [above](#dependencies). SDL3 still being new at the time of writing, it may not be packaged by all popular non rolling-release Linux distributions yet.
+    * If you would like to manage the code dependencies yourself, install libraries and headers for the dependencies listed [above](#dependencies). SDL2 is commonly packaged by major Linux distributions, but ensure you install the development headers in addition to the runtime library.
 
 3. **Clone the Descent3 source code.**
 

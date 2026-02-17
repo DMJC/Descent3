@@ -40,8 +40,8 @@
 #include <openxr/openxr_platform.h>
 #include "renderer.h"
 #include "vecmat.h"
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_opengl.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_opengl.h>
 #if defined(__linux__)
 #include <GL/glx.h>
 #endif

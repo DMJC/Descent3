@@ -68,7 +68,7 @@
 
 #include <cstdlib>
 #include <cstring>
-#include <SDL3/SDL.h>
+#include <SDL2/SDL.h>
 
 // rcg06182000 need this for specific joystick stuff.
 #include "args.h"
