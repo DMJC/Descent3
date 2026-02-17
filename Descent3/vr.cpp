@@ -54,6 +54,7 @@ int Vr_menu_height = 0;
 int Vr_menu_texture_size = 0;
 bool Vr_menu_texture_registered = false;
 bool Vr_menu_fbo_support_missing_logged = false;
+bool Vr_menu_render_active = false;
 
 struct VrGlFns {
   bool loaded = false;
@@ -344,6 +345,8 @@ void VR_InitStereoFrustums() {
 } // namespace
 
 void VR_BeginMenuFramebufferRender() {
+  Vr_menu_render_active = true;
+
   if (Vr_menu_fbo == 0) {
     return;
   }
@@ -364,6 +367,8 @@ void VR_BeginMenuFramebufferRender() {
 }
 
 void VR_EndMenuFramebufferRender() {
+  Vr_menu_render_active = false;
+
   auto &gl = VR_GetGlFns();
   if (gl.bind_framebuffer) {
     gl.bind_framebuffer(GL_FRAMEBUFFER, 0);
@@ -414,7 +419,7 @@ void VR_InitFromCommandLine() {
 
 bool VR_IsEnabled() { return Vr_enabled; }
 VrRenderMode VR_GetRenderMode() { return Vr_render_mode; }
-bool VR_IsStereoRendering() { return Vr_enabled && Vr_render_mode == VrRenderMode::Stereo; }
+bool VR_IsStereoRendering() { return Vr_enabled && Vr_render_mode == VrRenderMode::Stereo && !Vr_menu_render_active; }
 float VR_GetStereoEyeSeparation() { return Vr_enabled ? Vr_eye_separation : 0.0f; }
 
 void VR_RenderMenuFrame() {
