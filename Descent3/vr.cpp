@@ -69,6 +69,8 @@ struct VrGlFns {
   using BindFramebufferFn = void (*)(GLenum, GLuint);
   using FramebufferTexture2DFn = void (*)(GLenum, GLenum, GLenum, GLuint, GLint);
   using CheckFramebufferStatusFn = GLenum (*)(GLenum);
+  using GetIntegervFn = void (*)(GLenum, GLint *);
+  using ViewportFn = void (*)(GLint, GLint, GLsizei, GLsizei);
 
   GenTexturesFn gen_textures = nullptr;
   DeleteTexturesFn delete_textures = nullptr;
@@ -82,7 +84,12 @@ struct VrGlFns {
   BindFramebufferFn bind_framebuffer = nullptr;
   FramebufferTexture2DFn framebuffer_texture_2d = nullptr;
   CheckFramebufferStatusFn check_framebuffer_status = nullptr;
+  GetIntegervFn get_integerv = nullptr;
+  ViewportFn viewport = nullptr;
 };
+
+std::array<GLint, 4> Vr_saved_menu_viewport = {0, 0, 0, 0};
+bool Vr_saved_menu_viewport_valid = false;
 
 VrGlFns &VR_GetGlFns() {
   static VrGlFns fns;
@@ -127,6 +134,8 @@ VrGlFns &VR_GetGlFns() {
       load_proc("glFramebufferTexture2D", "glFramebufferTexture2DEXT", "glFramebufferTexture2DARB"));
   fns.check_framebuffer_status = reinterpret_cast<VrGlFns::CheckFramebufferStatusFn>(
       load_proc("glCheckFramebufferStatus", "glCheckFramebufferStatusEXT", "glCheckFramebufferStatusARB"));
+  fns.get_integerv = reinterpret_cast<VrGlFns::GetIntegervFn>(load_proc("glGetIntegerv"));
+  fns.viewport = reinterpret_cast<VrGlFns::ViewportFn>(load_proc("glViewport"));
   fns.loaded = true;
   return fns;
 }
@@ -341,7 +350,16 @@ void VR_BeginMenuFramebufferRender() {
 
   auto &gl = VR_GetGlFns();
   if (gl.bind_framebuffer) {
+    if (gl.get_integerv) {
+      gl.get_integerv(GL_VIEWPORT, Vr_saved_menu_viewport.data());
+      Vr_saved_menu_viewport_valid = true;
+    }
+
     gl.bind_framebuffer(GL_FRAMEBUFFER, Vr_menu_fbo);
+
+    if (gl.viewport && Vr_menu_width > 0 && Vr_menu_height > 0) {
+      gl.viewport(0, 0, Vr_menu_width, Vr_menu_height);
+    }
   }
 }
 
@@ -349,6 +367,13 @@ void VR_EndMenuFramebufferRender() {
   auto &gl = VR_GetGlFns();
   if (gl.bind_framebuffer) {
     gl.bind_framebuffer(GL_FRAMEBUFFER, 0);
+
+    if (gl.viewport && Vr_saved_menu_viewport_valid) {
+      gl.viewport(Vr_saved_menu_viewport[0], Vr_saved_menu_viewport[1],
+                  Vr_saved_menu_viewport[2], Vr_saved_menu_viewport[3]);
+    }
+
+    Vr_saved_menu_viewport_valid = false;
   }
 }
 
