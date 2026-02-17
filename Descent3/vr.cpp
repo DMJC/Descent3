@@ -55,6 +55,7 @@ int Vr_menu_height = 0;
 int Vr_menu_texture_size = 0;
 bool Vr_menu_texture_registered = false;
 bool Vr_menu_fbo_support_missing_logged = false;
+bool Vr_curved_menu_unavailable_logged = false;
 
 struct VrGlFns {
   bool loaded = false;
@@ -356,9 +357,9 @@ bool VR_SubmitOpenVrFrame(GLuint left_texture, GLuint right_texture) {
   return left_err == vr::VRCompositorError_None && right_err == vr::VRCompositorError_None;
 }
 
-void VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offset) {
+bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offset) {
   if (surface.texture == 0 || Vr_menu_fbo_texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
-    return;
+    return false;
   }
 
   auto &gl = VR_GetGlFns();
@@ -366,13 +367,13 @@ void VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
       !gl.clear_color || !gl.clear || !gl.disable || !gl.enable || !gl.matrix_mode || !gl.push_matrix ||
       !gl.pop_matrix || !gl.load_identity || !gl.frustum || !gl.translatef || !gl.begin || !gl.end ||
       !gl.tex_coord2f || !gl.vertex3f || !gl.bind_texture) {
-    return;
+    return false;
   }
 
   gl.bind_framebuffer(GL_FRAMEBUFFER, Vr_submit_fbo);
   gl.framebuffer_texture_2d(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, surface.texture, 0);
   if (gl.check_framebuffer_status(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-    return;
+    return false;
   }
 
   gl.viewport(0, 0, static_cast<GLsizei>(Vr_submit_width), static_cast<GLsizei>(Vr_submit_height));
@@ -423,6 +424,23 @@ void VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
   gl.matrix_mode(GL_PROJECTION);
   gl.pop_matrix();
   gl.matrix_mode(GL_MODELVIEW);
+  return true;
+}
+
+bool VR_CopyMenuToSubmitSurface(const VrSubmitSurface &surface) {
+  if (surface.texture == 0 || Vr_menu_fbo == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
+    return false;
+  }
+
+  auto &gl = VR_GetGlFns();
+  if (!gl.bind_framebuffer || !gl.bind_texture || !gl.copy_tex_sub_image_2d) {
+    return false;
+  }
+
+  gl.bind_framebuffer(GL_FRAMEBUFFER, Vr_menu_fbo);
+  gl.bind_texture(GL_TEXTURE_2D, surface.texture);
+  gl.copy_tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, 0, 0, Vr_submit_width, Vr_submit_height);
+  return true;
 }
 
 void VR_InitStereoFrustums() {
@@ -548,12 +566,27 @@ void VR_RenderMenuFrame() {
     gl.gen_framebuffers(1, &Vr_submit_fbo);
   }
 
-  if (Vr_submit_fbo == 0) {
-    return;
+  bool left_curved = false;
+  bool right_curved = false;
+
+  if (Vr_submit_fbo != 0) {
+    left_curved = VR_RenderCurvedMenuToSurface(Vr_submit_left, -0.5f * Vr_eye_separation);
+    right_curved = VR_RenderCurvedMenuToSurface(Vr_submit_right, 0.5f * Vr_eye_separation);
   }
 
-  VR_RenderCurvedMenuToSurface(Vr_submit_left, -0.5f * Vr_eye_separation);
-  VR_RenderCurvedMenuToSurface(Vr_submit_right, 0.5f * Vr_eye_separation);
+  if (!left_curved || !right_curved) {
+    if (!Vr_curved_menu_unavailable_logged) {
+      LOG_WARNING << "VR: Curved menu render path unavailable; falling back to flat menu submit.";
+      Vr_curved_menu_unavailable_logged = true;
+    }
+
+    if (!VR_CopyMenuToSubmitSurface(Vr_submit_left) || !VR_CopyMenuToSubmitSurface(Vr_submit_right)) {
+      if (gl.bind_framebuffer) {
+        gl.bind_framebuffer(GL_FRAMEBUFFER, 0);
+      }
+      return;
+    }
+  }
 
   if (gl.bind_framebuffer) {
     gl.bind_framebuffer(GL_FRAMEBUFFER, 0);
