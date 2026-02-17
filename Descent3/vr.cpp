@@ -451,6 +451,9 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
   const int segments = 64;
   const float z_bias = -0.75f;
 
+  const float u_max = (Vr_menu_texture_size > 0) ? (static_cast<float>(Vr_menu_width) / static_cast<float>(Vr_menu_texture_size)) : 1.0f;
+  const float v_max = (Vr_menu_texture_size > 0) ? (static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size)) : 1.0f;
+
   // Keep base vertex color neutral so menu texture displays unmodified.
   if (gl.color4f) {
     gl.color4f(1.0f, 1.0f, 1.0f, 1.0f);
@@ -465,9 +468,10 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
     // Keep the whole curved debug surface safely in front of the camera along -Z.
     const float z = ((std::cos(angle) * radius) - radius) + z_bias;
 
-    gl.tex_coord2f(t, 1.0f);
+    const float u = t * u_max;
+    gl.tex_coord2f(u, v_max);
     gl.vertex3f(x, screen_height * 0.5f, z);
-    gl.tex_coord2f(t, 0.0f);
+    gl.tex_coord2f(u, 0.0f);
     gl.vertex3f(x, -screen_height * 0.5f, z);
   }
   gl.end();
