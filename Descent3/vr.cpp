@@ -407,11 +407,17 @@ void VR_RenderMenuFrame() {
   }
 
   auto &gl = VR_GetGlFns();
-  if (gl.bind_texture && gl.copy_tex_sub_image_2d) {
+  if (gl.bind_texture && gl.copy_tex_sub_image_2d && gl.bind_framebuffer) {
+    // Copy from the dedicated menu framebuffer texture instead of the default
+    // window backbuffer. In VR mode the menu FBO is often much larger than the
+    // swapchain image, and reading from the wrong source can produce heavily
+    // corrupted output in the headset.
+    gl.bind_framebuffer(GL_FRAMEBUFFER, Vr_menu_fbo);
     gl.bind_texture(GL_TEXTURE_2D, Vr_submit_left.texture);
     gl.copy_tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, 0, 0, Vr_submit_width, Vr_submit_height);
     gl.bind_texture(GL_TEXTURE_2D, Vr_submit_right.texture);
     gl.copy_tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, 0, 0, Vr_submit_width, Vr_submit_height);
+    gl.bind_framebuffer(GL_FRAMEBUFFER, 0);
   }
 
   VR_SubmitOpenVrFrame(Vr_submit_left.texture, Vr_submit_right.texture);
