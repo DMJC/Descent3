@@ -44,7 +44,7 @@
 #include <cstring>
 #include <filesystem>
 
-#include <SDL3/SDL.h>
+#include <SDL2/SDL.h>
 
 #if defined(POSIX)
 #include <unistd.h>

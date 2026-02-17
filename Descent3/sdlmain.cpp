@@ -33,7 +33,7 @@
 #include <csignal>
 #endif
 
-#include <SDL3/SDL.h>
+#include <SDL2/SDL.h>
 
 #include "appdatabase.h"
 #include "application.h"
@@ -184,19 +184,19 @@ bool sdlMouseMotionFilter(const SDL_Event *event);
 
 bool SDLCALL d3SDLEventFilter(void *userdata, SDL_Event *event) {
   switch (event->type) {
-  case SDL_EVENT_KEY_UP:
-  case SDL_EVENT_KEY_DOWN:
+  case SDL_KEYUP:
+  case SDL_KEYDOWN:
     return (sdlKeyFilter(event));
-  case SDL_EVENT_JOYSTICK_BALL_MOTION:
-  case SDL_EVENT_MOUSE_MOTION:
+  case SDL_JOYBALLMOTION:
+  case SDL_MOUSEMOTION:
     return (sdlMouseMotionFilter(event));
-  case SDL_EVENT_MOUSE_BUTTON_UP:
+  case SDL_MOUSEBUTTONUP:
     return (sdlMouseButtonUpFilter(event));
-  case SDL_EVENT_MOUSE_BUTTON_DOWN:
+  case SDL_MOUSEBUTTONDOWN:
     return (sdlMouseButtonDownFilter(event));
-  case SDL_EVENT_MOUSE_WHEEL:
+  case SDL_MOUSEWHEEL:
     return (sdlMouseWheelFilter(event));
-  case SDL_EVENT_QUIT:
+  case SDL_QUIT:
     SDL_Quit();
     _exit(0);
     break;
@@ -245,7 +245,7 @@ int main(int argc, char *argv[]) {
 #endif
 
   int rc = SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO);
-  if (!rc) {
+  if (rc != 0) {
     LOG_FATAL.printf("SDL: SDL_Init() failed: %d: %s!", rc, SDL_GetError());
     return (0);
   }

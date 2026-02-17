@@ -7,14 +7,14 @@
     "openxr-loader",
     "plog",
     {
-      "name": "sdl3",
-      "version>=": "3.2.6",
+      "name": "sdl2",
+      "version>=": "2.30.9",
       "features": ["x11","wayland", "alsa"],
       "platform": "linux"
     },
     {
-      "name": "sdl3",
-      "version>=": "3.2.6",
+      "name": "sdl2",
+      "version>=": "2.30.9",
       "platform": "!linux"
     },
     {
@@ -26,8 +26,8 @@
   ],
   "overrides": [
     {
-      "name": "sdl3",
-      "version": "3.2.6"
+      "name": "sdl2",
+      "version": "2.30.9"
     }
  ]
 }

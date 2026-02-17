@@ -21,7 +21,7 @@
 #include <cstdlib>
 #include <cstdarg>
 
-#include <SDL3/SDL.h>
+#include <SDL2/SDL.h>
 
 #include "pserror.h"
 #include "mem.h"
@@ -46,7 +46,7 @@ static int sound_buffer_size = MAX_SOUNDS_PLAYING_AT_ONCE;
 lnxsound *ll_sound_ptr;
 
 // A peroidic mixer that uses the primary buffer as a stream buffer
-void StreamAudio(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount);
+void StreamAudio(void *userdata, Uint8 *stream, int len);
 
 lnxsound::lnxsound() : llsSystem() {
   ll_sound_ptr = this;
@@ -96,15 +96,18 @@ int lnxsound::InitSoundLib(char mixer_type, oeApplication *sos, uint8_t max_soun
   spec.format = SOUNDLIB_SAMPLE_SIZE == 8 ? SDL_AUDIO_U8 : SDL_AUDIO_S16;
   spec.channels = SOUNDLIB_CHANNELS;
 
-  this->sound_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, StreamAudio, &m_mixer); 
-  this->sound_device = SDL_GetAudioStreamDevice(sound_stream);
-  if (sound_device == 0) {
+  spec.samples = sampleCount;
+  spec.callback = StreamAudio;
+  spec.userdata = &m_mixer;
+
+  this->sound_device = SDL_OpenAudioDevice(nullptr, 0, &spec, nullptr, 0);
+  if (this->sound_device == 0) {
     strcpy(m_error_text, SDL_GetError());
     return false;
   }
 
   LOG_INFO << "Sound: Hardware configured. Kicking off stream thread...";
-  SDL_ResumeAudioDevice(sound_device);
+  SDL_PauseAudioDevice(sound_device, 0);
 
   m_total_sounds_played = 0;
   m_cur_sounds_played = 0;
@@ -133,6 +136,7 @@ bool lnxsound::GetDeviceSettings(SDL_AudioDeviceID *device, uint32_t *freq, uint
 // Cleans up after the Sound Library
 void lnxsound::DestroySoundLib() {
   if (sound_device) {
+    SDL_PauseAudioDevice(sound_device, 1);
     SDL_CloseAudioDevice(sound_device);
     sound_device = 0;
   }
@@ -755,15 +759,10 @@ void lnxsound_ErrorText(const char *fmt, ...) {
 }
 
 // A peroidic mixer that uses the primary buffer as a stream buffer
-void StreamAudio(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount)
-{
-    if (additional_amount > 0) {
-        Uint8 *data = SDL_stack_alloc(Uint8, additional_amount);
-        if (data) {
-            // StreamAudio(userdata, data, additional_amount);
-            ((software_mixer *)userdata)->StreamMixer((char *)data, additional_amount);
-            SDL_PutAudioStreamData(stream, data, additional_amount);
-            SDL_stack_free(data);
-        }
-    }
+void StreamAudio(void *userdata, Uint8 *stream, int len) {
+  if (len <= 0) {
+    return;
+  }
+
+  ((software_mixer *)userdata)->StreamMixer((char *)stream, len);
 }

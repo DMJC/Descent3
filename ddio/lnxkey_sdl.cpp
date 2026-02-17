@@ -64,7 +64,7 @@
  * $NoKeywords: $
  */
 
-#include <SDL3/SDL.h>
+#include <SDL2/SDL.h>
 
 #include "ddio.h"
 #include "pserror.h"
@@ -343,26 +343,26 @@ static inline uint8_t sdlkeycode_to_keycode(uint32_t sdlkeycode) {
 bool sdlKeyFilter(const SDL_Event *event) {
   uint8_t kc = 0;
 
-  if ((event->type != SDL_EVENT_KEY_UP) && (event->type != SDL_EVENT_KEY_DOWN))
+  if ((event->type != SDL_KEYUP) && (event->type != SDL_KEYDOWN))
     return true;
 
-  if (event->key.down) {
+  if (event->key.state == SDL_PRESSED) {
     if (event->key.repeat) {
       return false; // ignore these, we only want to know if it's a first time pressed, not a key-repeat.
     }
-    kc = sdlkeycode_to_keycode(event->key.key);
-    if (event->key.mod & SDL_KMOD_CTRL) {
+    kc = sdlkeycode_to_keycode(event->key.keysym.sym);
+    if (event->key.keysym.mod & SDL_KMOD_CTRL) {
       extern SDL_Window *GSDLWindow;
       switch (kc) {
       case KEY_G: // toggle grabbed input.
         bool grab = !ddio_MouseGetGrab();
         ddio_MouseSetGrab(grab);
-        SDL_SetWindowRelativeMouseMode(GSDLWindow, grab);
+        SDL_SetRelativeMouseMode(grab ? SDL_TRUE : SDL_FALSE);
         return false;
       } // switch
     }   // if
 
-    else if (event->key.mod & SDL_KMOD_ALT) {
+    else if (event->key.keysym.mod & SDL_KMOD_ALT) {
       if ((kc == KEY_ENTER) || (kc == KEY_PADENTER)) {
         Game_fullscreen = !Game_fullscreen;
         rend_SetFullScreen(Game_fullscreen);
@@ -375,7 +375,7 @@ bool sdlKeyFilter(const SDL_Event *event) {
     ddio_UpdateKeyState(kc, true);
 
   } else {
-    kc = sdlkeycode_to_keycode(event->key.key);
+    kc = sdlkeycode_to_keycode(event->key.keysym.sym);
     if (LKeys[kc].status) {
       LKeys[kc].up_time = timer_GetTime();
       LKeys[kc].status = false;

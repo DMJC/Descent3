@@ -12,7 +12,7 @@ target_link_libraries(inetfile PRIVATE
 )
 target_link_libraries(inetfile PUBLIC
   httplib # For some reason, linking it privately causes issues at runtime
-  SDL3::SDL3
+  SDL2::SDL2
 )
 target_include_directories(inetfile PUBLIC
   $<BUILD_INTERFACE:
@@ -20,5 +20,5 @@ target_include_directories(inetfile PUBLIC
   >
   mem
 )
-target_include_directories(inetfile PRIVATE ${SDL3_INCLUDE_DIRS})
+target_include_directories(inetfile PRIVATE ${SDL2_INCLUDE_DIRS})
 

@@ -19,7 +19,7 @@
 #ifndef LIBMVE_MOVIE_SOUND_H_
 #define LIBMVE_MOVIE_SOUND_H_
 
-#include <SDL3/SDL_audio.h>
+#include <SDL2/SDL_audio.h>
 
 #include "sound_interface.h"
 
@@ -28,7 +28,7 @@ namespace D3 {
 /// Implementation class for sound device used on movie playback.
 class MovieSoundDevice : ISoundDevice {
 private:
-  SDL_AudioStream* stream = nullptr;
+  SDL_AudioDeviceID device = 0;
   uint16_t m_sample_size = 0;
 
 public:
@@ -46,7 +46,7 @@ public:
    * Check if sound device is properly initialized
    * @return true on success
    */
-  [[nodiscard]] bool IsInitialized() const { return this->stream != nullptr; }
+  [[nodiscard]] bool IsInitialized() const { return this->device != 0; }
 
   /**
    * Fill internal audio stream to be played
