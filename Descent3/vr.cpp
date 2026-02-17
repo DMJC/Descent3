@@ -53,6 +53,7 @@ int Vr_menu_width = 0;
 int Vr_menu_height = 0;
 int Vr_menu_texture_size = 0;
 bool Vr_menu_texture_registered = false;
+bool Vr_menu_fbo_support_missing_logged = false;
 
 struct VrGlFns {
   bool loaded = false;
@@ -199,9 +200,13 @@ void VR_EnsureMenuBitmap() {
   if (!gl.gen_textures || !gl.delete_textures || !gl.bind_texture || !gl.tex_parameteri || !gl.tex_image_2d ||
       !gl.gen_framebuffers || !gl.delete_framebuffers || !gl.bind_framebuffer || !gl.framebuffer_texture_2d ||
       !gl.check_framebuffer_status) {
-    LOG_WARNING << "VR: Missing GL functions for framebuffer creation";
+    if (!Vr_menu_fbo_support_missing_logged) {
+      LOG_WARNING << "VR: Missing GL functions for framebuffer creation";
+      Vr_menu_fbo_support_missing_logged = true;
+    }
     return;
   }
+  Vr_menu_fbo_support_missing_logged = false;
 
   if (Vr_menu_fbo != 0) {
     gl.delete_framebuffers(1, &Vr_menu_fbo);
