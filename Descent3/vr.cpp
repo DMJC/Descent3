@@ -56,6 +56,8 @@ int Vr_menu_texture_size = 0;
 bool Vr_menu_texture_registered = false;
 bool Vr_menu_fbo_support_missing_logged = false;
 bool Vr_curved_menu_unavailable_logged = false;
+bool Vr_ipd_logged = false;
+uint32_t Vr_submit_frame_counter = 0;
 
 struct VrGlFns {
   bool loaded = false;
@@ -363,6 +365,19 @@ bool VR_SubmitOpenVrFrame(GLuint left_texture, GLuint right_texture) {
     return false;
   }
 
+  ++Vr_submit_frame_counter;
+  const auto &hmd_pose = tracked_device_pose[vr::k_unTrackedDeviceIndex_Hmd];
+  if (!hmd_pose.bPoseIsValid) {
+    if (Vr_submit_frame_counter <= 5 || (Vr_submit_frame_counter % 300u) == 0u) {
+      LOG_WARNING.printf("OpenVR HMD pose invalid (frame=%u, connected=%d)", Vr_submit_frame_counter,
+                         hmd_pose.bDeviceIsConnected ? 1 : 0);
+    }
+  } else if (Vr_submit_frame_counter <= 5 || (Vr_submit_frame_counter % 300u) == 0u) {
+    const auto &m = hmd_pose.mDeviceToAbsoluteTracking;
+    LOG_INFO.printf("OpenVR HMD pose (frame=%u): pos=(%.3f, %.3f, %.3f)", Vr_submit_frame_counter, m.m[0][3], m.m[1][3],
+                    m.m[2][3]);
+  }
+
   vr::Texture_t left = {reinterpret_cast<void *>(static_cast<uintptr_t>(left_texture)), vr::TextureType_OpenGL, vr::ColorSpace_Gamma};
   vr::Texture_t right = {reinterpret_cast<void *>(static_cast<uintptr_t>(right_texture)), vr::TextureType_OpenGL, vr::ColorSpace_Gamma};
 
@@ -485,6 +500,15 @@ void VR_InitStereoFrustums() {
   const auto eye_to_head_left = Vr_system->GetEyeToHeadTransform(vr::Eye_Left);
   const auto eye_to_head_right = Vr_system->GetEyeToHeadTransform(vr::Eye_Right);
   Vr_eye_separation = std::fabs(eye_to_head_right.m[0][3] - eye_to_head_left.m[0][3]);
+
+  if (!Vr_ipd_logged) {
+    LOG_INFO.printf("OpenVR eye-to-head offsets: left_x=%.6f right_x=%.6f -> IPD=%.3f mm", eye_to_head_left.m[0][3],
+                    eye_to_head_right.m[0][3], Vr_eye_separation * 1000.0f);
+    if (Vr_eye_separation < 0.045f || Vr_eye_separation > 0.085f) {
+      LOG_WARNING.printf("OpenVR reported unusual IPD %.3f mm", Vr_eye_separation * 1000.0f);
+    }
+    Vr_ipd_logged = true;
+  }
 
   g3_SetStereoFrustum(&left_frustum, &right_frustum);
 }
