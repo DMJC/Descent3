@@ -446,6 +446,7 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
   const float arc_half_angle = 0.85f;
   const float screen_height = 1.15f;
   const int segments = 64;
+  const float z_bias = -0.75f;
 
   // Explicitly set draw color for the untextured debug geometry so it remains
   // visible even if prior engine state changed the current GL color.
@@ -456,7 +457,8 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
     const float t = static_cast<float>(i) / static_cast<float>(segments);
     const float angle = (t * 2.0f - 1.0f) * arc_half_angle;
     const float x = std::sin(angle) * radius;
-    const float z = (std::cos(angle) * radius) - radius;
+    // Keep the whole curved debug surface safely in front of the camera along -Z.
+    const float z = ((std::cos(angle) * radius) - radius) + z_bias;
 
     gl.vertex3f(x, screen_height * 0.5f, z);
     gl.vertex3f(x, -screen_height * 0.5f, z);
