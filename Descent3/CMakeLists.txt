@@ -340,8 +340,9 @@ target_link_libraries(Descent3 PRIVATE
   misc
   model
   module
-  $<$<TARGET_EXISTS:OpenXR::openxr_loader>:OpenXR::openxr_loader>
-  $<$<TARGET_EXISTS:OpenXR::OpenXR>:OpenXR::OpenXR>
+  $<$<TARGET_EXISTS:openvr_api>:openvr_api>
+  $<$<TARGET_EXISTS:OpenVR::openvr_api>:OpenVR::openvr_api>
+  $<$<BOOL:${OPENVR_API_LIBRARY}>:${OPENVR_API_LIBRARY}>
   music
   networking
   physics
