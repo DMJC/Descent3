@@ -28,7 +28,7 @@
 #include "../renderer/dyna_gl.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
-#include <openvr.h>
+#include <openvr/openvr.h>
 
 namespace {
 bool Vr_enabled = false;
@@ -237,7 +237,8 @@ void VR_EnsureMenuBitmap() {
 
   Vr_menu_bitmap = bm_AllocBitmap(desired_texture_size, desired_texture_size, 0);
   if (Vr_menu_bitmap >= 0) {
-    rend_RegisterExternalTexture(Vr_menu_bitmap, static_cast<uintptr_t>(Vr_menu_fbo_texture));
+    rend_RegisterExternalTexture(Vr_menu_bitmap, static_cast<uintptr_t>(Vr_menu_fbo_texture), desired_texture_size,
+                                 desired_texture_size);
     Vr_menu_texture_registered = true;
   }
 

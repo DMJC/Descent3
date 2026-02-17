@@ -182,20 +182,21 @@ bool sdlMouseButtonDownFilter(const SDL_Event *event);
 bool sdlMouseWheelFilter(const SDL_Event *event);
 bool sdlMouseMotionFilter(const SDL_Event *event);
 
-bool SDLCALL d3SDLEventFilter(void *userdata, SDL_Event *event) {
+int SDLCALL d3SDLEventFilter(void *userdata, SDL_Event *event) {
+  (void)userdata;
   switch (event->type) {
   case SDL_KEYUP:
   case SDL_KEYDOWN:
-    return (sdlKeyFilter(event));
+    return sdlKeyFilter(event) ? 1 : 0;
   case SDL_JOYBALLMOTION:
   case SDL_MOUSEMOTION:
-    return (sdlMouseMotionFilter(event));
+    return sdlMouseMotionFilter(event) ? 1 : 0;
   case SDL_MOUSEBUTTONUP:
-    return (sdlMouseButtonUpFilter(event));
+    return sdlMouseButtonUpFilter(event) ? 1 : 0;
   case SDL_MOUSEBUTTONDOWN:
-    return (sdlMouseButtonDownFilter(event));
+    return sdlMouseButtonDownFilter(event) ? 1 : 0;
   case SDL_MOUSEWHEEL:
-    return (sdlMouseWheelFilter(event));
+    return sdlMouseWheelFilter(event) ? 1 : 0;
   case SDL_QUIT:
     SDL_Quit();
     _exit(0);
@@ -204,7 +205,7 @@ bool SDLCALL d3SDLEventFilter(void *userdata, SDL_Event *event) {
     break;
   } // switch
 
-  return (1);
+  return 1;
 }
 
 //	---------------------------------------------------------------------------
