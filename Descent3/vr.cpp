@@ -90,6 +90,15 @@ VrGlFns &VR_GetGlFns() {
     return fns;
   }
 
+  // The first VR setup call can happen before the OpenGL context is active.
+  // In that case SDL can't resolve GL entry points yet, so keep retrying
+  // until a context is available instead of caching nullptr function pointers.
+  if (SDL_GL_GetCurrentContext() == nullptr) {
+    return fns;
+  }
+
+  fns = VrGlFns{};
+
   const auto load_proc = [](const char *primary, const char *fallback_ext = nullptr, const char *fallback_arb = nullptr) {
     void *proc = SDL_GL_GetProcAddress(primary);
     if (!proc && fallback_ext) {
