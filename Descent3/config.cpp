@@ -364,7 +364,7 @@ void ConfigureDisplayResolutions() {
       if (SDL_GetDisplayMode(d, modes_id, &mode) != 0) {
         continue;
       }
-      resolutions.emplace(tVideoResolution{static_cast<uint16_t>(mode->w), static_cast<uint16_t>(mode->h)});
+      resolutions.emplace(tVideoResolution{static_cast<uint16_t>(mode.w), static_cast<uint16_t>(mode.h)});
     }
   }
 
@@ -408,8 +408,8 @@ void ConfigureDisplayResolutions() {
     if (SDL_GetCurrentDisplayMode(Display_id, &current_mode) != 0) {
       return;
     }
-    current_resolution.width = static_cast<unsigned short>(current_mode->w);
-    current_resolution.height = static_cast<unsigned short>(current_mode->h);
+    current_resolution.width = static_cast<unsigned short>(current_mode.w);
+    current_resolution.height = static_cast<unsigned short>(current_mode.h);
   }
 
   // Fill in Video_res_list from the set of unique resolutions
