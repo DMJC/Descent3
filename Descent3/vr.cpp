@@ -422,6 +422,8 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
 
   gl.disable(GL_DEPTH_TEST);
   gl.disable(GL_CULL_FACE);
+  gl.disable(GL_LIGHTING);
+  gl.disable(GL_BLEND);
   gl.disable(GL_TEXTURE_2D);
 
   gl.matrix_mode(GL_PROJECTION);
@@ -444,6 +446,10 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
   const float arc_half_angle = 0.85f;
   const float screen_height = 1.15f;
   const int segments = 64;
+
+  // Explicitly set draw color for the untextured debug geometry so it remains
+  // visible even if prior engine state changed the current GL color.
+  glColor4f(1.0f, 1.0f, 0.0f, 1.0f);
 
   gl.begin(GL_QUAD_STRIP);
   for (int i = 0; i <= segments; ++i) {
