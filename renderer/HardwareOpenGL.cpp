@@ -414,10 +414,6 @@ int opengl_Setup(oeApplication *app, const int *width, const int *height) {
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
   if (!GSDLWindow) {
-    int display_num = 0;
-    int display_arg = FindArg("-display");
-    int display_count = 0;
-
     GSDLWindow = SDL_CreateWindow("Descent 3", SDL_WINDOWPOS_UNDEFINED_DISPLAY(Display_id),
                                   SDL_WINDOWPOS_UNDEFINED_DISPLAY(Display_id), winw, winh,
                                   SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
@@ -448,7 +444,7 @@ int opengl_Setup(oeApplication *app, const int *width, const int *height) {
     LoadGLFnPtrs();
   } catch (std::exception const &ex) {
     // TODO: more raii-esque construction and cleanup here
-    SDL_GL_DestroyContext(GSDLGLContext);
+    SDL_GL_DeleteContext(GSDLGLContext);
     GSDLGLContext = nullptr;
     SDL_DestroyWindow(GSDLWindow);
     GSDLWindow = nullptr;
@@ -505,7 +501,7 @@ int opengl_Setup(oeApplication *app, const int *width, const int *height) {
     dglDeleteRenderbuffers(1, &GOpenGLRBOColor);
     dglDeleteRenderbuffers(1, &GOpenGLRBODepth);
     GOpenGLFBO = GOpenGLRBOColor = GOpenGLRBODepth = 0;
-    SDL_GL_DestroyContext(GSDLGLContext);
+    SDL_GL_DeleteContext(GSDLGLContext);
     SDL_DestroyWindow(GSDLWindow);
     GSDLGLContext = nullptr;
     GSDLWindow = nullptr;
@@ -702,7 +698,7 @@ void opengl_Close(const bool just_resizing) {
 
   if (GSDLGLContext) {
     SDL_GL_MakeCurrent(nullptr, nullptr);
-    SDL_GL_DestroyContext(GSDLGLContext);
+    SDL_GL_DeleteContext(GSDLGLContext);
     GSDLGLContext = nullptr;
     GOpenGLFBOWidth = GOpenGLFBOHeight = GOpenGLFBO = GOpenGLRBOColor = GOpenGLRBODepth = 0;
   }
@@ -1157,8 +1153,7 @@ void rend_SetGammaValue(float val) {
 
 void rend_SetFullScreen(bool fullscreen) {
   if (GSDLWindow) {
-    SDL_SetWindowFullscreen(GSDLWindow, fullscreen);
-    SDL_SyncWindow(GSDLWindow);
+    SDL_SetWindowFullscreen(GSDLWindow, fullscreen ? SDL_WINDOW_FULLSCREEN : 0);
   }
 
   if (fullscreen) {
