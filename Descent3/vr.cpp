@@ -76,6 +76,7 @@ struct VrGlFns {
   using CheckFramebufferStatusFn = GLenum (*)(GLenum);
   using GetIntegervFn = void (*)(GLenum, GLint *);
   using ViewportFn = void (*)(GLint, GLint, GLsizei, GLsizei);
+  using ScissorFn = decltype(&glScissor);
   using ClearColorFn = decltype(&glClearColor);
   using ClearFn = decltype(&glClear);
   using DisableFn = decltype(&glDisable);
@@ -106,6 +107,7 @@ struct VrGlFns {
   CheckFramebufferStatusFn check_framebuffer_status = nullptr;
   GetIntegervFn get_integerv = nullptr;
   ViewportFn viewport = nullptr;
+  ScissorFn scissor = nullptr;
   ClearColorFn clear_color = nullptr;
   ClearFn clear = nullptr;
   DisableFn disable = nullptr;
@@ -171,6 +173,7 @@ VrGlFns &VR_GetGlFns() {
       load_proc("glCheckFramebufferStatus", "glCheckFramebufferStatusEXT", "glCheckFramebufferStatusARB"));
   fns.get_integerv = reinterpret_cast<VrGlFns::GetIntegervFn>(load_proc("glGetIntegerv"));
   fns.viewport = reinterpret_cast<VrGlFns::ViewportFn>(load_proc("glViewport"));
+  fns.scissor = reinterpret_cast<VrGlFns::ScissorFn>(load_proc("glScissor"));
   fns.clear_color = reinterpret_cast<VrGlFns::ClearColorFn>(load_proc("glClearColor"));
   fns.clear = reinterpret_cast<VrGlFns::ClearFn>(load_proc("glClear"));
   fns.disable = reinterpret_cast<VrGlFns::DisableFn>(load_proc("glDisable"));
@@ -428,6 +431,50 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
   gl.disable(GL_LIGHTING);
   gl.disable(GL_BLEND);
   gl.disable(GL_TEXTURE_2D);
+
+  // Debug curved-screen visibility path that does not rely on fixed-function
+  // matrix/color immediate-mode entry points (which may be unavailable with
+  // modern GL contexts). Draw a curved yellow strip via scissored clears.
+  if (gl.scissor) {
+    gl.enable(GL_SCISSOR_TEST);
+
+    const int width = static_cast<int>(Vr_submit_width);
+    const int height = static_cast<int>(Vr_submit_height);
+    const int segments = 96;
+    const float curve_half_angle = 0.9f;
+
+    for (int i = 0; i < segments; ++i) {
+      const float t0 = static_cast<float>(i) / static_cast<float>(segments);
+      const float t1 = static_cast<float>(i + 1) / static_cast<float>(segments);
+      const float a0 = (t0 * 2.0f - 1.0f) * curve_half_angle;
+      const float a1 = (t1 * 2.0f - 1.0f) * curve_half_angle;
+
+      const float x0_ndc = std::sin(a0) * 0.80f;
+      const float x1_ndc = std::sin(a1) * 0.80f;
+      const float mid = 0.5f * (a0 + a1);
+      const float half_h_ndc = 0.20f + 0.18f * std::cos(mid);
+
+      int sx0 = static_cast<int>((x0_ndc * 0.5f + 0.5f) * static_cast<float>(width));
+      int sx1 = static_cast<int>((x1_ndc * 0.5f + 0.5f) * static_cast<float>(width));
+      if (sx1 < sx0) {
+        std::swap(sx0, sx1);
+      }
+      const int sw = std::max(1, sx1 - sx0 + 1);
+
+      int sy0 = static_cast<int>((0.5f - half_h_ndc) * static_cast<float>(height));
+      int sy1 = static_cast<int>((0.5f + half_h_ndc) * static_cast<float>(height));
+      sy0 = std::max(0, std::min(height - 1, sy0));
+      sy1 = std::max(0, std::min(height - 1, sy1));
+      const int sh = std::max(1, sy1 - sy0 + 1);
+
+      gl.scissor(sx0, sy0, sw, sh);
+      gl.clear_color(1.f, 1.f, 0.f, 1.f);
+      gl.clear(GL_COLOR_BUFFER_BIT);
+    }
+
+    gl.disable(GL_SCISSOR_TEST);
+    return true;
+  }
 
   gl.matrix_mode(GL_PROJECTION);
   gl.push_matrix();
