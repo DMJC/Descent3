@@ -72,6 +72,20 @@ struct VrGlFns {
   using CheckFramebufferStatusFn = GLenum (*)(GLenum);
   using GetIntegervFn = void (*)(GLenum, GLint *);
   using ViewportFn = void (*)(GLint, GLint, GLsizei, GLsizei);
+  using ClearColorFn = decltype(&glClearColor);
+  using ClearFn = decltype(&glClear);
+  using DisableFn = decltype(&glDisable);
+  using EnableFn = decltype(&glEnable);
+  using MatrixModeFn = decltype(&glMatrixMode);
+  using PushMatrixFn = decltype(&glPushMatrix);
+  using PopMatrixFn = decltype(&glPopMatrix);
+  using LoadIdentityFn = decltype(&glLoadIdentity);
+  using FrustumFn = decltype(&glFrustum);
+  using TranslatefFn = decltype(&glTranslatef);
+  using BeginFn = decltype(&glBegin);
+  using EndFn = decltype(&glEnd);
+  using TexCoord2fFn = decltype(&glTexCoord2f);
+  using Vertex3fFn = decltype(&glVertex3f);
 
   GenTexturesFn gen_textures = nullptr;
   DeleteTexturesFn delete_textures = nullptr;
@@ -87,6 +101,20 @@ struct VrGlFns {
   CheckFramebufferStatusFn check_framebuffer_status = nullptr;
   GetIntegervFn get_integerv = nullptr;
   ViewportFn viewport = nullptr;
+  ClearColorFn clear_color = nullptr;
+  ClearFn clear = nullptr;
+  DisableFn disable = nullptr;
+  EnableFn enable = nullptr;
+  MatrixModeFn matrix_mode = nullptr;
+  PushMatrixFn push_matrix = nullptr;
+  PopMatrixFn pop_matrix = nullptr;
+  LoadIdentityFn load_identity = nullptr;
+  FrustumFn frustum = nullptr;
+  TranslatefFn translatef = nullptr;
+  BeginFn begin = nullptr;
+  EndFn end = nullptr;
+  TexCoord2fFn tex_coord2f = nullptr;
+  Vertex3fFn vertex3f = nullptr;
 };
 
 std::array<GLint, 4> Vr_saved_menu_viewport = {0, 0, 0, 0};
@@ -137,6 +165,20 @@ VrGlFns &VR_GetGlFns() {
       load_proc("glCheckFramebufferStatus", "glCheckFramebufferStatusEXT", "glCheckFramebufferStatusARB"));
   fns.get_integerv = reinterpret_cast<VrGlFns::GetIntegervFn>(load_proc("glGetIntegerv"));
   fns.viewport = reinterpret_cast<VrGlFns::ViewportFn>(load_proc("glViewport"));
+  fns.clear_color = reinterpret_cast<VrGlFns::ClearColorFn>(load_proc("glClearColor"));
+  fns.clear = reinterpret_cast<VrGlFns::ClearFn>(load_proc("glClear"));
+  fns.disable = reinterpret_cast<VrGlFns::DisableFn>(load_proc("glDisable"));
+  fns.enable = reinterpret_cast<VrGlFns::EnableFn>(load_proc("glEnable"));
+  fns.matrix_mode = reinterpret_cast<VrGlFns::MatrixModeFn>(load_proc("glMatrixMode"));
+  fns.push_matrix = reinterpret_cast<VrGlFns::PushMatrixFn>(load_proc("glPushMatrix"));
+  fns.pop_matrix = reinterpret_cast<VrGlFns::PopMatrixFn>(load_proc("glPopMatrix"));
+  fns.load_identity = reinterpret_cast<VrGlFns::LoadIdentityFn>(load_proc("glLoadIdentity"));
+  fns.frustum = reinterpret_cast<VrGlFns::FrustumFn>(load_proc("glFrustum"));
+  fns.translatef = reinterpret_cast<VrGlFns::TranslatefFn>(load_proc("glTranslatef"));
+  fns.begin = reinterpret_cast<VrGlFns::BeginFn>(load_proc("glBegin"));
+  fns.end = reinterpret_cast<VrGlFns::EndFn>(load_proc("glEnd"));
+  fns.tex_coord2f = reinterpret_cast<VrGlFns::TexCoord2fFn>(load_proc("glTexCoord2f"));
+  fns.vertex3f = reinterpret_cast<VrGlFns::Vertex3fFn>(load_proc("glVertex3f"));
   fns.loaded = true;
   return fns;
 }
@@ -320,7 +362,10 @@ void VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
   }
 
   auto &gl = VR_GetGlFns();
-  if (!gl.bind_framebuffer || !gl.framebuffer_texture_2d || !gl.viewport || !gl.check_framebuffer_status) {
+  if (!gl.bind_framebuffer || !gl.framebuffer_texture_2d || !gl.viewport || !gl.check_framebuffer_status ||
+      !gl.clear_color || !gl.clear || !gl.disable || !gl.enable || !gl.matrix_mode || !gl.push_matrix ||
+      !gl.pop_matrix || !gl.load_identity || !gl.frustum || !gl.translatef || !gl.begin || !gl.end ||
+      !gl.tex_coord2f || !gl.vertex3f || !gl.bind_texture) {
     return;
   }
 
@@ -331,53 +376,53 @@ void VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
   }
 
   gl.viewport(0, 0, static_cast<GLsizei>(Vr_submit_width), static_cast<GLsizei>(Vr_submit_height));
-  glClearColor(0.f, 0.f, 0.f, 1.f);
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  gl.clear_color(0.f, 0.f, 0.f, 1.f);
+  gl.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  glDisable(GL_DEPTH_TEST);
-  glDisable(GL_CULL_FACE);
-  glEnable(GL_TEXTURE_2D);
+  gl.disable(GL_DEPTH_TEST);
+  gl.disable(GL_CULL_FACE);
+  gl.enable(GL_TEXTURE_2D);
 
-  glMatrixMode(GL_PROJECTION);
-  glPushMatrix();
-  glLoadIdentity();
+  gl.matrix_mode(GL_PROJECTION);
+  gl.push_matrix();
+  gl.load_identity();
   const float near_plane = 0.1f;
   const float far_plane = 10.0f;
   const float top = near_plane;
   const float right = top * (static_cast<float>(Vr_submit_width) / static_cast<float>(Vr_submit_height));
-  glFrustum(-right, right, -top, top, near_plane, far_plane);
+  gl.frustum(-right, right, -top, top, near_plane, far_plane);
 
-  glMatrixMode(GL_MODELVIEW);
-  glPushMatrix();
-  glLoadIdentity();
+  gl.matrix_mode(GL_MODELVIEW);
+  gl.push_matrix();
+  gl.load_identity();
 
   const float menu_distance = 1.25f;
-  glTranslatef(-eye_offset, 0.0f, -menu_distance);
+  gl.translatef(-eye_offset, 0.0f, -menu_distance);
 
   const float radius = 1.15f;
   const float arc_half_angle = 0.85f;
   const float screen_height = 1.15f;
   const int segments = 64;
 
-  glBindTexture(GL_TEXTURE_2D, Vr_menu_fbo_texture);
-  glBegin(GL_QUAD_STRIP);
+  gl.bind_texture(GL_TEXTURE_2D, Vr_menu_fbo_texture);
+  gl.begin(GL_QUAD_STRIP);
   for (int i = 0; i <= segments; ++i) {
     const float t = static_cast<float>(i) / static_cast<float>(segments);
     const float angle = (t * 2.0f - 1.0f) * arc_half_angle;
     const float x = std::sin(angle) * radius;
     const float z = (std::cos(angle) * radius) - radius;
 
-    glTexCoord2f(t, 1.0f);
-    glVertex3f(x, screen_height * 0.5f, z);
-    glTexCoord2f(t, 0.0f);
-    glVertex3f(x, -screen_height * 0.5f, z);
+    gl.tex_coord2f(t, 1.0f);
+    gl.vertex3f(x, screen_height * 0.5f, z);
+    gl.tex_coord2f(t, 0.0f);
+    gl.vertex3f(x, -screen_height * 0.5f, z);
   }
-  glEnd();
+  gl.end();
 
-  glPopMatrix();
-  glMatrixMode(GL_PROJECTION);
-  glPopMatrix();
-  glMatrixMode(GL_MODELVIEW);
+  gl.pop_matrix();
+  gl.matrix_mode(GL_PROJECTION);
+  gl.pop_matrix();
+  gl.matrix_mode(GL_MODELVIEW);
 }
 
 void VR_InitStereoFrustums() {
