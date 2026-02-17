@@ -27,6 +27,7 @@
 #include <cstring>
 #include <filesystem>
 #include <map>
+#include <type_traits>
 
 #ifndef WIN32
 #include <unistd.h>
@@ -182,21 +183,23 @@ bool sdlMouseButtonDownFilter(const SDL_Event *event);
 bool sdlMouseWheelFilter(const SDL_Event *event);
 bool sdlMouseMotionFilter(const SDL_Event *event);
 
-int SDLCALL d3SDLEventFilter(void *userdata, SDL_Event *event) {
+using d3_sdl_event_filter_result = std::invoke_result_t<SDL_EventFilter, void *, SDL_Event *>;
+
+d3_sdl_event_filter_result SDLCALL d3SDLEventFilter(void *userdata, SDL_Event *event) {
   (void)userdata;
   switch (event->type) {
   case SDL_KEYUP:
   case SDL_KEYDOWN:
-    return sdlKeyFilter(event) ? 1 : 0;
+    return static_cast<d3_sdl_event_filter_result>(sdlKeyFilter(event));
   case SDL_JOYBALLMOTION:
   case SDL_MOUSEMOTION:
-    return sdlMouseMotionFilter(event) ? 1 : 0;
+    return static_cast<d3_sdl_event_filter_result>(sdlMouseMotionFilter(event));
   case SDL_MOUSEBUTTONUP:
-    return sdlMouseButtonUpFilter(event) ? 1 : 0;
+    return static_cast<d3_sdl_event_filter_result>(sdlMouseButtonUpFilter(event));
   case SDL_MOUSEBUTTONDOWN:
-    return sdlMouseButtonDownFilter(event) ? 1 : 0;
+    return static_cast<d3_sdl_event_filter_result>(sdlMouseButtonDownFilter(event));
   case SDL_MOUSEWHEEL:
-    return sdlMouseWheelFilter(event) ? 1 : 0;
+    return static_cast<d3_sdl_event_filter_result>(sdlMouseWheelFilter(event));
   case SDL_QUIT:
     SDL_Quit();
     _exit(0);
@@ -205,7 +208,7 @@ int SDLCALL d3SDLEventFilter(void *userdata, SDL_Event *event) {
     break;
   } // switch
 
-  return 1;
+  return static_cast<d3_sdl_event_filter_result>(1);
 }
 
 //	---------------------------------------------------------------------------
