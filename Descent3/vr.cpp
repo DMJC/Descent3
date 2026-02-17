@@ -90,18 +90,34 @@ VrGlFns &VR_GetGlFns() {
     return fns;
   }
 
-  fns.gen_textures = reinterpret_cast<VrGlFns::GenTexturesFn>(SDL_GL_GetProcAddress("glGenTextures"));
-  fns.delete_textures = reinterpret_cast<VrGlFns::DeleteTexturesFn>(SDL_GL_GetProcAddress("glDeleteTextures"));
-  fns.bind_texture = reinterpret_cast<VrGlFns::BindTextureFn>(SDL_GL_GetProcAddress("glBindTexture"));
-  fns.tex_parameteri = reinterpret_cast<VrGlFns::TexParameteriFn>(SDL_GL_GetProcAddress("glTexParameteri"));
-  fns.tex_image_2d = reinterpret_cast<VrGlFns::TexImage2DFn>(SDL_GL_GetProcAddress("glTexImage2D"));
-  fns.tex_sub_image_2d = reinterpret_cast<VrGlFns::TexSubImage2DFn>(SDL_GL_GetProcAddress("glTexSubImage2D"));
-  fns.copy_tex_sub_image_2d = reinterpret_cast<VrGlFns::CopyTexSubImage2DFn>(SDL_GL_GetProcAddress("glCopyTexSubImage2D"));
-  fns.gen_framebuffers = reinterpret_cast<VrGlFns::GenFramebuffersFn>(SDL_GL_GetProcAddress("glGenFramebuffers"));
-  fns.delete_framebuffers = reinterpret_cast<VrGlFns::DeleteFramebuffersFn>(SDL_GL_GetProcAddress("glDeleteFramebuffers"));
-  fns.bind_framebuffer = reinterpret_cast<VrGlFns::BindFramebufferFn>(SDL_GL_GetProcAddress("glBindFramebuffer"));
-  fns.framebuffer_texture_2d = reinterpret_cast<VrGlFns::FramebufferTexture2DFn>(SDL_GL_GetProcAddress("glFramebufferTexture2D"));
-  fns.check_framebuffer_status = reinterpret_cast<VrGlFns::CheckFramebufferStatusFn>(SDL_GL_GetProcAddress("glCheckFramebufferStatus"));
+  const auto load_proc = [](const char *primary, const char *fallback_ext = nullptr, const char *fallback_arb = nullptr) {
+    void *proc = SDL_GL_GetProcAddress(primary);
+    if (!proc && fallback_ext) {
+      proc = SDL_GL_GetProcAddress(fallback_ext);
+    }
+    if (!proc && fallback_arb) {
+      proc = SDL_GL_GetProcAddress(fallback_arb);
+    }
+    return proc;
+  };
+
+  fns.gen_textures = reinterpret_cast<VrGlFns::GenTexturesFn>(load_proc("glGenTextures"));
+  fns.delete_textures = reinterpret_cast<VrGlFns::DeleteTexturesFn>(load_proc("glDeleteTextures"));
+  fns.bind_texture = reinterpret_cast<VrGlFns::BindTextureFn>(load_proc("glBindTexture"));
+  fns.tex_parameteri = reinterpret_cast<VrGlFns::TexParameteriFn>(load_proc("glTexParameteri"));
+  fns.tex_image_2d = reinterpret_cast<VrGlFns::TexImage2DFn>(load_proc("glTexImage2D"));
+  fns.tex_sub_image_2d = reinterpret_cast<VrGlFns::TexSubImage2DFn>(load_proc("glTexSubImage2D"));
+  fns.copy_tex_sub_image_2d = reinterpret_cast<VrGlFns::CopyTexSubImage2DFn>(load_proc("glCopyTexSubImage2D"));
+  fns.gen_framebuffers =
+      reinterpret_cast<VrGlFns::GenFramebuffersFn>(load_proc("glGenFramebuffers", "glGenFramebuffersEXT", "glGenFramebuffersARB"));
+  fns.delete_framebuffers = reinterpret_cast<VrGlFns::DeleteFramebuffersFn>(
+      load_proc("glDeleteFramebuffers", "glDeleteFramebuffersEXT", "glDeleteFramebuffersARB"));
+  fns.bind_framebuffer =
+      reinterpret_cast<VrGlFns::BindFramebufferFn>(load_proc("glBindFramebuffer", "glBindFramebufferEXT", "glBindFramebufferARB"));
+  fns.framebuffer_texture_2d = reinterpret_cast<VrGlFns::FramebufferTexture2DFn>(
+      load_proc("glFramebufferTexture2D", "glFramebufferTexture2DEXT", "glFramebufferTexture2DARB"));
+  fns.check_framebuffer_status = reinterpret_cast<VrGlFns::CheckFramebufferStatusFn>(
+      load_proc("glCheckFramebufferStatus", "glCheckFramebufferStatusEXT", "glCheckFramebufferStatusARB"));
   fns.loaded = true;
   return fns;
 }
