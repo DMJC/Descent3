@@ -401,7 +401,7 @@ bool VR_SubmitOpenVrFrame(GLuint left_texture, GLuint right_texture) {
 }
 
 bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offset) {
-  if (surface.texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
+  if (surface.texture == 0 || Vr_menu_fbo_texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
     return false;
   }
 
@@ -409,7 +409,7 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
   if (!gl.bind_framebuffer || !gl.framebuffer_texture_2d || !gl.viewport || !gl.check_framebuffer_status ||
       !gl.clear_color || !gl.clear || !gl.disable || !gl.enable || !gl.matrix_mode || !gl.push_matrix ||
       !gl.pop_matrix || !gl.load_identity || !gl.frustum || !gl.translatef || !gl.begin || !gl.end ||
-      !gl.vertex3f) {
+      !gl.tex_coord2f || !gl.vertex3f || !gl.bind_texture) {
     return false;
   }
 
@@ -420,61 +420,14 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
   }
 
   gl.viewport(0, 0, static_cast<GLsizei>(Vr_submit_width), static_cast<GLsizei>(Vr_submit_height));
-  // Keep the render target visibly non-black while debugging the curved menu path.
-  // If the headset still appears black with this, the issue is in submit/runtime/display,
-  // not merely menu texturing.
-  gl.clear_color(1.f, 0.f, 1.f, 1.f);
+  gl.clear_color(0.f, 0.f, 0.f, 1.f);
   gl.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
   gl.disable(GL_DEPTH_TEST);
   gl.disable(GL_CULL_FACE);
   gl.disable(GL_LIGHTING);
   gl.disable(GL_BLEND);
-  gl.disable(GL_TEXTURE_2D);
-
-  // Debug curved-screen visibility path that does not rely on fixed-function
-  // matrix/color immediate-mode entry points (which may be unavailable with
-  // modern GL contexts). Draw a curved yellow strip via scissored clears.
-  if (gl.scissor) {
-    gl.enable(GL_SCISSOR_TEST);
-
-    const int width = static_cast<int>(Vr_submit_width);
-    const int height = static_cast<int>(Vr_submit_height);
-    const int segments = 96;
-    const float curve_half_angle = 0.9f;
-
-    for (int i = 0; i < segments; ++i) {
-      const float t0 = static_cast<float>(i) / static_cast<float>(segments);
-      const float t1 = static_cast<float>(i + 1) / static_cast<float>(segments);
-      const float a0 = (t0 * 2.0f - 1.0f) * curve_half_angle;
-      const float a1 = (t1 * 2.0f - 1.0f) * curve_half_angle;
-
-      const float x0_ndc = std::sin(a0) * 0.80f;
-      const float x1_ndc = std::sin(a1) * 0.80f;
-      const float mid = 0.5f * (a0 + a1);
-      const float half_h_ndc = 0.20f + 0.18f * std::cos(mid);
-
-      int sx0 = static_cast<int>((x0_ndc * 0.5f + 0.5f) * static_cast<float>(width));
-      int sx1 = static_cast<int>((x1_ndc * 0.5f + 0.5f) * static_cast<float>(width));
-      if (sx1 < sx0) {
-        std::swap(sx0, sx1);
-      }
-      const int sw = std::max(1, sx1 - sx0 + 1);
-
-      int sy0 = static_cast<int>((0.5f - half_h_ndc) * static_cast<float>(height));
-      int sy1 = static_cast<int>((0.5f + half_h_ndc) * static_cast<float>(height));
-      sy0 = std::max(0, std::min(height - 1, sy0));
-      sy1 = std::max(0, std::min(height - 1, sy1));
-      const int sh = std::max(1, sy1 - sy0 + 1);
-
-      gl.scissor(sx0, sy0, sw, sh);
-      gl.clear_color(1.f, 1.f, 0.f, 1.f);
-      gl.clear(GL_COLOR_BUFFER_BIT);
-    }
-
-    gl.disable(GL_SCISSOR_TEST);
-    return true;
-  }
+  gl.enable(GL_TEXTURE_2D);
 
   gl.matrix_mode(GL_PROJECTION);
   gl.push_matrix();
@@ -498,12 +451,12 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
   const int segments = 64;
   const float z_bias = -0.75f;
 
-  // Explicitly set draw color for the untextured debug geometry so it remains
-  // visible even if prior engine state changed the current GL color.
+  // Keep base vertex color neutral so menu texture displays unmodified.
   if (gl.color4f) {
-    gl.color4f(1.0f, 1.0f, 0.0f, 1.0f);
+    gl.color4f(1.0f, 1.0f, 1.0f, 1.0f);
   }
 
+  gl.bind_texture(GL_TEXTURE_2D, Vr_menu_fbo_texture);
   gl.begin(GL_QUAD_STRIP);
   for (int i = 0; i <= segments; ++i) {
     const float t = static_cast<float>(i) / static_cast<float>(segments);
@@ -512,7 +465,9 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
     // Keep the whole curved debug surface safely in front of the camera along -Z.
     const float z = ((std::cos(angle) * radius) - radius) + z_bias;
 
+    gl.tex_coord2f(t, 1.0f);
     gl.vertex3f(x, screen_height * 0.5f, z);
+    gl.tex_coord2f(t, 0.0f);
     gl.vertex3f(x, -screen_height * 0.5f, z);
   }
   gl.end();
