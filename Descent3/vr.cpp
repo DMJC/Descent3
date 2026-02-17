@@ -48,12 +48,14 @@ VrSubmitSurface Vr_submit_left;
 VrSubmitSurface Vr_submit_right;
 GLuint Vr_menu_fbo = 0;
 GLuint Vr_menu_fbo_texture = 0;
+GLuint Vr_submit_fbo = 0;
 int Vr_menu_bitmap = -1;
 int Vr_menu_width = 0;
 int Vr_menu_height = 0;
 int Vr_menu_texture_size = 0;
 bool Vr_menu_texture_registered = false;
 bool Vr_menu_fbo_support_missing_logged = false;
+bool Vr_curved_menu_unavailable_logged = false;
 
 struct VrGlFns {
   bool loaded = false;
@@ -71,6 +73,20 @@ struct VrGlFns {
   using CheckFramebufferStatusFn = GLenum (*)(GLenum);
   using GetIntegervFn = void (*)(GLenum, GLint *);
   using ViewportFn = void (*)(GLint, GLint, GLsizei, GLsizei);
+  using ClearColorFn = decltype(&glClearColor);
+  using ClearFn = decltype(&glClear);
+  using DisableFn = decltype(&glDisable);
+  using EnableFn = decltype(&glEnable);
+  using MatrixModeFn = decltype(&glMatrixMode);
+  using PushMatrixFn = decltype(&glPushMatrix);
+  using PopMatrixFn = decltype(&glPopMatrix);
+  using LoadIdentityFn = decltype(&glLoadIdentity);
+  using FrustumFn = decltype(&glFrustum);
+  using TranslatefFn = decltype(&glTranslatef);
+  using BeginFn = decltype(&glBegin);
+  using EndFn = decltype(&glEnd);
+  using TexCoord2fFn = decltype(&glTexCoord2f);
+  using Vertex3fFn = decltype(&glVertex3f);
 
   GenTexturesFn gen_textures = nullptr;
   DeleteTexturesFn delete_textures = nullptr;
@@ -86,6 +102,20 @@ struct VrGlFns {
   CheckFramebufferStatusFn check_framebuffer_status = nullptr;
   GetIntegervFn get_integerv = nullptr;
   ViewportFn viewport = nullptr;
+  ClearColorFn clear_color = nullptr;
+  ClearFn clear = nullptr;
+  DisableFn disable = nullptr;
+  EnableFn enable = nullptr;
+  MatrixModeFn matrix_mode = nullptr;
+  PushMatrixFn push_matrix = nullptr;
+  PopMatrixFn pop_matrix = nullptr;
+  LoadIdentityFn load_identity = nullptr;
+  FrustumFn frustum = nullptr;
+  TranslatefFn translatef = nullptr;
+  BeginFn begin = nullptr;
+  EndFn end = nullptr;
+  TexCoord2fFn tex_coord2f = nullptr;
+  Vertex3fFn vertex3f = nullptr;
 };
 
 std::array<GLint, 4> Vr_saved_menu_viewport = {0, 0, 0, 0};
@@ -136,6 +166,20 @@ VrGlFns &VR_GetGlFns() {
       load_proc("glCheckFramebufferStatus", "glCheckFramebufferStatusEXT", "glCheckFramebufferStatusARB"));
   fns.get_integerv = reinterpret_cast<VrGlFns::GetIntegervFn>(load_proc("glGetIntegerv"));
   fns.viewport = reinterpret_cast<VrGlFns::ViewportFn>(load_proc("glViewport"));
+  fns.clear_color = reinterpret_cast<VrGlFns::ClearColorFn>(load_proc("glClearColor"));
+  fns.clear = reinterpret_cast<VrGlFns::ClearFn>(load_proc("glClear"));
+  fns.disable = reinterpret_cast<VrGlFns::DisableFn>(load_proc("glDisable"));
+  fns.enable = reinterpret_cast<VrGlFns::EnableFn>(load_proc("glEnable"));
+  fns.matrix_mode = reinterpret_cast<VrGlFns::MatrixModeFn>(load_proc("glMatrixMode"));
+  fns.push_matrix = reinterpret_cast<VrGlFns::PushMatrixFn>(load_proc("glPushMatrix"));
+  fns.pop_matrix = reinterpret_cast<VrGlFns::PopMatrixFn>(load_proc("glPopMatrix"));
+  fns.load_identity = reinterpret_cast<VrGlFns::LoadIdentityFn>(load_proc("glLoadIdentity"));
+  fns.frustum = reinterpret_cast<VrGlFns::FrustumFn>(load_proc("glFrustum"));
+  fns.translatef = reinterpret_cast<VrGlFns::TranslatefFn>(load_proc("glTranslatef"));
+  fns.begin = reinterpret_cast<VrGlFns::BeginFn>(load_proc("glBegin"));
+  fns.end = reinterpret_cast<VrGlFns::EndFn>(load_proc("glEnd"));
+  fns.tex_coord2f = reinterpret_cast<VrGlFns::TexCoord2fFn>(load_proc("glTexCoord2f"));
+  fns.vertex3f = reinterpret_cast<VrGlFns::Vertex3fFn>(load_proc("glVertex3f"));
   fns.loaded = true;
   return fns;
 }
@@ -313,6 +357,92 @@ bool VR_SubmitOpenVrFrame(GLuint left_texture, GLuint right_texture) {
   return left_err == vr::VRCompositorError_None && right_err == vr::VRCompositorError_None;
 }
 
+bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offset) {
+  if (surface.texture == 0 || Vr_menu_fbo_texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
+    return false;
+  }
+
+  auto &gl = VR_GetGlFns();
+  if (!gl.bind_framebuffer || !gl.framebuffer_texture_2d || !gl.viewport || !gl.check_framebuffer_status ||
+      !gl.clear_color || !gl.clear || !gl.disable || !gl.enable || !gl.matrix_mode || !gl.push_matrix ||
+      !gl.pop_matrix || !gl.load_identity || !gl.frustum || !gl.translatef || !gl.begin || !gl.end ||
+      !gl.tex_coord2f || !gl.vertex3f || !gl.bind_texture) {
+    return false;
+  }
+
+  gl.bind_framebuffer(GL_FRAMEBUFFER, Vr_submit_fbo);
+  gl.framebuffer_texture_2d(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, surface.texture, 0);
+  if (gl.check_framebuffer_status(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    return false;
+  }
+
+  gl.viewport(0, 0, static_cast<GLsizei>(Vr_submit_width), static_cast<GLsizei>(Vr_submit_height));
+  gl.clear_color(0.f, 0.f, 0.f, 1.f);
+  gl.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+  gl.disable(GL_DEPTH_TEST);
+  gl.disable(GL_CULL_FACE);
+  gl.enable(GL_TEXTURE_2D);
+
+  gl.matrix_mode(GL_PROJECTION);
+  gl.push_matrix();
+  gl.load_identity();
+  const float near_plane = 0.1f;
+  const float far_plane = 10.0f;
+  const float top = near_plane;
+  const float right = top * (static_cast<float>(Vr_submit_width) / static_cast<float>(Vr_submit_height));
+  gl.frustum(-right, right, -top, top, near_plane, far_plane);
+
+  gl.matrix_mode(GL_MODELVIEW);
+  gl.push_matrix();
+  gl.load_identity();
+
+  const float menu_distance = 1.25f;
+  gl.translatef(-eye_offset, 0.0f, -menu_distance);
+
+  const float radius = 1.15f;
+  const float arc_half_angle = 0.85f;
+  const float screen_height = 1.15f;
+  const int segments = 64;
+
+  gl.bind_texture(GL_TEXTURE_2D, Vr_menu_fbo_texture);
+  gl.begin(GL_QUAD_STRIP);
+  for (int i = 0; i <= segments; ++i) {
+    const float t = static_cast<float>(i) / static_cast<float>(segments);
+    const float angle = (t * 2.0f - 1.0f) * arc_half_angle;
+    const float x = std::sin(angle) * radius;
+    const float z = (std::cos(angle) * radius) - radius;
+
+    gl.tex_coord2f(t, 1.0f);
+    gl.vertex3f(x, screen_height * 0.5f, z);
+    gl.tex_coord2f(t, 0.0f);
+    gl.vertex3f(x, -screen_height * 0.5f, z);
+  }
+  gl.end();
+
+  gl.pop_matrix();
+  gl.matrix_mode(GL_PROJECTION);
+  gl.pop_matrix();
+  gl.matrix_mode(GL_MODELVIEW);
+  return true;
+}
+
+bool VR_CopyMenuToSubmitSurface(const VrSubmitSurface &surface) {
+  if (surface.texture == 0 || Vr_menu_fbo == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
+    return false;
+  }
+
+  auto &gl = VR_GetGlFns();
+  if (!gl.bind_framebuffer || !gl.bind_texture || !gl.copy_tex_sub_image_2d) {
+    return false;
+  }
+
+  gl.bind_framebuffer(GL_FRAMEBUFFER, Vr_menu_fbo);
+  gl.bind_texture(GL_TEXTURE_2D, surface.texture);
+  gl.copy_tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, 0, 0, Vr_submit_width, Vr_submit_height);
+  return true;
+}
+
 void VR_InitStereoFrustums() {
   if (!Vr_openvr_ready || Vr_system == nullptr) {
     return;
@@ -432,16 +562,33 @@ void VR_RenderMenuFrame() {
   }
 
   auto &gl = VR_GetGlFns();
-  if (gl.bind_texture && gl.copy_tex_sub_image_2d && gl.bind_framebuffer) {
-    // Copy from the dedicated menu framebuffer texture instead of the default
-    // window backbuffer. In VR mode the menu FBO is often much larger than the
-    // swapchain image, and reading from the wrong source can produce heavily
-    // corrupted output in the headset.
-    gl.bind_framebuffer(GL_FRAMEBUFFER, Vr_menu_fbo);
-    gl.bind_texture(GL_TEXTURE_2D, Vr_submit_left.texture);
-    gl.copy_tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, 0, 0, Vr_submit_width, Vr_submit_height);
-    gl.bind_texture(GL_TEXTURE_2D, Vr_submit_right.texture);
-    gl.copy_tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, 0, 0, Vr_submit_width, Vr_submit_height);
+  if (Vr_submit_fbo == 0 && gl.gen_framebuffers) {
+    gl.gen_framebuffers(1, &Vr_submit_fbo);
+  }
+
+  bool left_curved = false;
+  bool right_curved = false;
+
+  if (Vr_submit_fbo != 0) {
+    left_curved = VR_RenderCurvedMenuToSurface(Vr_submit_left, -0.5f * Vr_eye_separation);
+    right_curved = VR_RenderCurvedMenuToSurface(Vr_submit_right, 0.5f * Vr_eye_separation);
+  }
+
+  if (!left_curved || !right_curved) {
+    if (!Vr_curved_menu_unavailable_logged) {
+      LOG_WARNING << "VR: Curved menu render path unavailable; falling back to flat menu submit.";
+      Vr_curved_menu_unavailable_logged = true;
+    }
+
+    if (!VR_CopyMenuToSubmitSurface(Vr_submit_left) || !VR_CopyMenuToSubmitSurface(Vr_submit_right)) {
+      if (gl.bind_framebuffer) {
+        gl.bind_framebuffer(GL_FRAMEBUFFER, 0);
+      }
+      return;
+    }
+  }
+
+  if (gl.bind_framebuffer) {
     gl.bind_framebuffer(GL_FRAMEBUFFER, 0);
   }
 
@@ -468,8 +615,10 @@ void VR_ResetGraphicsResources() {
   VR_DeleteSubmitSurface(Vr_submit_right);
 
   if (Vr_menu_fbo != 0 && gl.delete_framebuffers) gl.delete_framebuffers(1, &Vr_menu_fbo);
+  if (Vr_submit_fbo != 0 && gl.delete_framebuffers) gl.delete_framebuffers(1, &Vr_submit_fbo);
   if (Vr_menu_fbo_texture != 0 && gl.delete_textures) gl.delete_textures(1, &Vr_menu_fbo_texture);
   Vr_menu_fbo = 0;
+  Vr_submit_fbo = 0;
   Vr_menu_fbo_texture = 0;
 
   if (Vr_menu_bitmap >= 0) {
