@@ -673,8 +673,10 @@ void VR_RenderMenuFrame() {
   bool right_curved = false;
 
   if (Vr_submit_fbo != 0) {
-    left_curved = VR_RenderCurvedMenuToSurface(Vr_submit_left, -0.5f * Vr_eye_separation);
-    right_curved = VR_RenderCurvedMenuToSurface(Vr_submit_right, 0.5f * Vr_eye_separation);
+    // Keep debug curved-menu rendering at zero stereo disparity to avoid
+    // binocular doubling while we validate geometry visibility.
+    left_curved = VR_RenderCurvedMenuToSurface(Vr_submit_left, 0.0f);
+    right_curved = VR_RenderCurvedMenuToSurface(Vr_submit_right, 0.0f);
   }
 
   if (!Vr_menu_submit_path_logged) {
