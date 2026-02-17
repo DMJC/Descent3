@@ -294,10 +294,10 @@ static inline uint8_t sdlkeycode_to_keycode(uint32_t sdlkeycode) {
   case SDLK_BACKSLASH:
     rc = KEY_BACKSLASH;
     break;
-  case SDLK_GRAVE:
+  case SDLK_BACKQUOTE:
     rc = KEY_LAPOSTRO;
     break;
-  case SDLK_APOSTROPHE:
+  case SDLK_QUOTE:
     rc = KEY_RAPOSTRO;
     break;
   case SDLK_SEMICOLON:
@@ -327,8 +327,8 @@ static inline uint8_t sdlkeycode_to_keycode(uint32_t sdlkeycode) {
 
     // convert 'a' - 'z' to 0-27, and then convert to ddio format.
   default:
-    if (rc >= SDLK_A && rc <= SDLK_Z) {
-      rc = (rc - SDLK_A) + 1;
+    if (rc >= SDLK_a && rc <= SDLK_z) {
+      rc = (rc - SDLK_a) + 1;
     } else {
       rc = 0;
     }
@@ -351,7 +351,7 @@ bool sdlKeyFilter(const SDL_Event *event) {
       return false; // ignore these, we only want to know if it's a first time pressed, not a key-repeat.
     }
     kc = sdlkeycode_to_keycode(event->key.keysym.sym);
-    if (event->key.keysym.mod & SDL_KMOD_CTRL) {
+    if (event->key.keysym.mod & KMOD_CTRL) {
       extern SDL_Window *GSDLWindow;
       switch (kc) {
       case KEY_G: // toggle grabbed input.
@@ -362,7 +362,7 @@ bool sdlKeyFilter(const SDL_Event *event) {
       } // switch
     }   // if
 
-    else if (event->key.keysym.mod & SDL_KMOD_ALT) {
+    else if (event->key.keysym.mod & KMOD_ALT) {
       if ((kc == KEY_ENTER) || (kc == KEY_PADENTER)) {
         Game_fullscreen = !Game_fullscreen;
         rend_SetFullScreen(Game_fullscreen);
