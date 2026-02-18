@@ -687,16 +687,17 @@ void VR_RenderMenuFrame() {
   bool right_curved = false;
   bool flat_copy = false;
 
-  // Prefer direct menu-texture copy for now; this path is currently the most
-  // reliable way to keep the headset menu visible while curved texturing is
-  // still being debugged.
-  flat_copy = VR_CopyMenuToSubmitSurface(Vr_submit_left) && VR_CopyMenuToSubmitSurface(Vr_submit_right);
-
-  if (!flat_copy && Vr_submit_fbo != 0) {
+  // Prefer curved rendering first so the menu is presented as curved geometry.
+  // Fall back to flat copy only if curved rendering is unavailable.
+  if (Vr_submit_fbo != 0) {
     // Keep debug curved-menu rendering at zero stereo disparity to avoid
     // binocular doubling while we validate geometry visibility.
     left_curved = VR_RenderCurvedMenuToSurface(Vr_submit_left, 0.0f);
     right_curved = VR_RenderCurvedMenuToSurface(Vr_submit_right, 0.0f);
+  }
+
+  if (!left_curved || !right_curved) {
+    flat_copy = VR_CopyMenuToSubmitSurface(Vr_submit_left) && VR_CopyMenuToSubmitSurface(Vr_submit_right);
   }
 
   if (!Vr_menu_submit_path_logged) {
