@@ -81,6 +81,7 @@ struct VrGlFns {
   using ClearFn = decltype(&glClear);
   using DisableFn = decltype(&glDisable);
   using EnableFn = decltype(&glEnable);
+  using BlendFuncFn = decltype(&glBlendFunc);
   using MatrixModeFn = decltype(&glMatrixMode);
   using PushMatrixFn = decltype(&glPushMatrix);
   using PopMatrixFn = decltype(&glPopMatrix);
@@ -112,6 +113,7 @@ struct VrGlFns {
   ClearFn clear = nullptr;
   DisableFn disable = nullptr;
   EnableFn enable = nullptr;
+  BlendFuncFn blend_func = nullptr;
   MatrixModeFn matrix_mode = nullptr;
   PushMatrixFn push_matrix = nullptr;
   PopMatrixFn pop_matrix = nullptr;
@@ -178,6 +180,7 @@ VrGlFns &VR_GetGlFns() {
   fns.clear = reinterpret_cast<VrGlFns::ClearFn>(load_proc("glClear"));
   fns.disable = reinterpret_cast<VrGlFns::DisableFn>(load_proc("glDisable"));
   fns.enable = reinterpret_cast<VrGlFns::EnableFn>(load_proc("glEnable"));
+  fns.blend_func = reinterpret_cast<VrGlFns::BlendFuncFn>(load_proc("glBlendFunc"));
   fns.matrix_mode = reinterpret_cast<VrGlFns::MatrixModeFn>(load_proc("glMatrixMode"));
   fns.push_matrix = reinterpret_cast<VrGlFns::PushMatrixFn>(load_proc("glPushMatrix"));
   fns.pop_matrix = reinterpret_cast<VrGlFns::PopMatrixFn>(load_proc("glPopMatrix"));
@@ -426,12 +429,16 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
   gl.disable(GL_DEPTH_TEST);
   gl.disable(GL_CULL_FACE);
   gl.disable(GL_LIGHTING);
-  gl.disable(GL_BLEND);
+  gl.enable(GL_BLEND);
+  if (gl.blend_func) {
+    gl.blend_func(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  }
   gl.enable(GL_TEXTURE_2D);
 
-  // Preferred path: emulate curved projection by copying menu texture strips
-  // into curved destination strip positions (no fixed-function immediate mode).
-  if (Vr_menu_fbo != 0 && gl.copy_tex_sub_image_2d && gl.bind_texture) {
+  // Optional strip-copy path. Disabled by default because it can create
+  // character/background block artifacts on alpha-heavy menu text.
+  const bool use_strip_copy_curved_path = false;
+  if (use_strip_copy_curved_path && Vr_menu_fbo != 0 && gl.copy_tex_sub_image_2d && gl.bind_texture) {
     gl.bind_texture(GL_TEXTURE_2D, surface.texture);
 
     const int dst_w = static_cast<int>(Vr_submit_width);
