@@ -453,10 +453,12 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
     const int src_h = std::max(1, Vr_menu_height);
     const int segments = 128;
     const float curve_half_angle = 0.9f;
+    const float menu_distance = 1.25f;
 
     const float panel_width = static_cast<float>(dst_w) * 0.62f;
     const float panel_height = static_cast<float>(dst_h) * 0.68f;
-    const float panel_center_x = 0.5f * static_cast<float>(dst_w);
+    const float eye_shift_ndc = (-eye_offset / menu_distance);
+    const float panel_center_x = 0.5f * static_cast<float>(dst_w) + eye_shift_ndc * (0.5f * static_cast<float>(dst_w));
     const float panel_center_y = 0.5f * static_cast<float>(dst_h);
     const int panel_y0 = std::max(0, static_cast<int>(panel_center_y - panel_height * 0.5f));
     const int panel_y1 = std::min(dst_h - 1, static_cast<int>(panel_center_y + panel_height * 0.5f));
@@ -706,10 +708,9 @@ void VR_RenderMenuFrame() {
   // Prefer curved rendering first so the menu is presented as curved geometry.
   // Fall back to flat copy only if curved rendering is unavailable.
   if (Vr_submit_fbo != 0) {
-    // Keep debug curved-menu rendering at zero stereo disparity to avoid
-    // binocular doubling while we validate geometry visibility.
-    left_curved = VR_RenderCurvedMenuToSurface(Vr_submit_left, 0.0f);
-    right_curved = VR_RenderCurvedMenuToSurface(Vr_submit_right, 0.0f);
+    // Render curved menu with per-eye offsets so stereo converges naturally.
+    left_curved = VR_RenderCurvedMenuToSurface(Vr_submit_left, -0.5f * Vr_eye_separation);
+    right_curved = VR_RenderCurvedMenuToSurface(Vr_submit_right, 0.5f * Vr_eye_separation);
   }
 
   if (!left_curved || !right_curved) {
