@@ -57,6 +57,7 @@ bool Vr_menu_texture_registered = false;
 bool Vr_menu_fbo_support_missing_logged = false;
 bool Vr_curved_menu_unavailable_logged = false;
 bool Vr_menu_submit_path_logged = false;
+uint32_t Vr_menu_eye_offset_log_count = 0;
 bool Vr_ipd_logged = false;
 uint32_t Vr_submit_frame_counter = 0;
 
@@ -457,8 +458,16 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
 
     const float panel_width = static_cast<float>(dst_w) * 0.62f;
     const float panel_height = static_cast<float>(dst_h) * 0.68f;
-    const float eye_shift_ndc = (-eye_offset / menu_distance);
-    const float panel_center_x = 0.5f * static_cast<float>(dst_w) + eye_shift_ndc * (0.5f * static_cast<float>(dst_w));
+    const float convergence_scale = 1.75f;
+    const float eye_shift_ndc = (-eye_offset / menu_distance) * convergence_scale;
+    const float eye_shift_pixels = eye_shift_ndc * (0.5f * static_cast<float>(dst_w));
+    const float panel_center_x = 0.5f * static_cast<float>(dst_w) + eye_shift_pixels;
+
+    if (Vr_menu_eye_offset_log_count < 4) {
+      LOG_INFO.printf("VR curved strip eye offset: eye_offset=%.5f m, shift_ndc=%.5f, shift_px=%.2f", eye_offset, eye_shift_ndc,
+                      eye_shift_pixels);
+      ++Vr_menu_eye_offset_log_count;
+    }
     const float panel_center_y = 0.5f * static_cast<float>(dst_h);
     const int panel_y0 = std::max(0, static_cast<int>(panel_center_y - panel_height * 0.5f));
     const int panel_y1 = std::min(dst_h - 1, static_cast<int>(panel_center_y + panel_height * 0.5f));
@@ -771,6 +780,7 @@ void VR_ResetGraphicsResources() {
   VR_DeleteSubmitSurface(Vr_submit_left);
   VR_DeleteSubmitSurface(Vr_submit_right);
   Vr_menu_submit_path_logged = false;
+  Vr_menu_eye_offset_log_count = 0;
 
   if (Vr_menu_fbo != 0 && gl.delete_framebuffers) gl.delete_framebuffers(1, &Vr_menu_fbo);
   if (Vr_submit_fbo != 0 && gl.delete_framebuffers) gl.delete_framebuffers(1, &Vr_submit_fbo);
