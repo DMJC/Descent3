@@ -630,8 +630,14 @@ void VR_RenderMenuFrame() {
 
   bool left_curved = false;
   bool right_curved = false;
+  bool flat_copy = false;
 
-  if (Vr_submit_fbo != 0) {
+  // Prefer direct menu-texture copy for now; this path is currently the most
+  // reliable way to keep the headset menu visible while curved texturing is
+  // still being debugged.
+  flat_copy = VR_CopyMenuToSubmitSurface(Vr_submit_left) && VR_CopyMenuToSubmitSurface(Vr_submit_right);
+
+  if (!flat_copy && Vr_submit_fbo != 0) {
     // Keep debug curved-menu rendering at zero stereo disparity to avoid
     // binocular doubling while we validate geometry visibility.
     left_curved = VR_RenderCurvedMenuToSurface(Vr_submit_left, 0.0f);
@@ -639,12 +645,13 @@ void VR_RenderMenuFrame() {
   }
 
   if (!Vr_menu_submit_path_logged) {
-    LOG_INFO.printf("VR menu submit path: curved_left=%d curved_right=%d submit_fbo=%u eye_sep=%.3fmm", left_curved ? 1 : 0,
-                    right_curved ? 1 : 0, static_cast<unsigned int>(Vr_submit_fbo), Vr_eye_separation * 1000.0f);
+    LOG_INFO.printf("VR menu submit path: flat_copy=%d curved_left=%d curved_right=%d submit_fbo=%u eye_sep=%.3fmm",
+                    flat_copy ? 1 : 0, left_curved ? 1 : 0, right_curved ? 1 : 0, static_cast<unsigned int>(Vr_submit_fbo),
+                    Vr_eye_separation * 1000.0f);
     Vr_menu_submit_path_logged = true;
   }
 
-  if (!left_curved || !right_curved) {
+  if (!flat_copy && (!left_curved || !right_curved)) {
     if (!Vr_curved_menu_unavailable_logged) {
       LOG_WARNING << "VR: Curved menu render path unavailable; falling back to flat menu submit.";
       Vr_curved_menu_unavailable_logged = true;
