@@ -437,7 +437,9 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
   gl.enable(GL_TEXTURE_2D);
 
   // Optional strip-copy path.
-  const bool use_strip_copy_curved_path = true;
+  // Disabled to avoid eye-texture-only shifts; use geometry path below so
+  // stereo comes from moving the curved polygon relative to each eye camera.
+  const bool use_strip_copy_curved_path = false;
   if (use_strip_copy_curved_path && Vr_menu_fbo != 0 && gl.copy_tex_sub_image_2d && gl.bind_texture) {
     // Enforce alpha blending on this path so copied strips preserve text/menu
     // transparency when composited into the curved destination surface.
@@ -535,6 +537,11 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
 
   const float menu_distance = 1.25f;
   gl.translatef(-eye_offset, 0.0f, -menu_distance);
+
+  if (Vr_menu_eye_offset_log_count < 4) {
+    LOG_INFO.printf("VR curved geometry eye offset: eye_offset=%.5f m (translate_x=%.5f)", eye_offset, -eye_offset);
+    ++Vr_menu_eye_offset_log_count;
+  }
 
   const float radius = 1.15f;
   const float arc_half_angle = 0.85f;
