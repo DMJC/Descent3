@@ -465,12 +465,14 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
     const float eye_shift_pixels = std::clamp(requested_eye_shift_pixels, -max_shift_pixels, max_shift_pixels);
     const float eye_shift_ndc = eye_shift_pixels / (0.5f * static_cast<float>(dst_w));
     const float panel_center_x = 0.5f * static_cast<float>(dst_w) + eye_shift_pixels;
-    const float src_shift_pixels = eye_shift_pixels * (static_cast<float>(src_w) / std::max(1.0f, panel_width));
+    // Keep source sampling centered so we don't cancel perceived stereo by
+    // shifting both destination placement and source sampling together.
+    const float src_shift_pixels = 0.0f;
 
     if (Vr_menu_eye_offset_log_count < 4) {
       LOG_INFO.printf(
-          "VR curved strip eye offset: eye_offset=%.5f m, req_shift_ndc=%.5f req_shift_px=%.2f, applied_shift_ndc=%.5f applied_shift_px=%.2f src_shift_px=%.2f",
-          eye_offset, requested_eye_shift_ndc, requested_eye_shift_pixels, eye_shift_ndc, eye_shift_pixels, src_shift_pixels);
+          "VR curved strip eye offset: eye_offset=%.5f m, req_shift_ndc=%.5f req_shift_px=%.2f, applied_shift_ndc=%.5f applied_shift_px=%.2f",
+          eye_offset, requested_eye_shift_ndc, requested_eye_shift_pixels, eye_shift_ndc, eye_shift_pixels);
       ++Vr_menu_eye_offset_log_count;
     }
     const float panel_center_y = 0.5f * static_cast<float>(dst_h);
