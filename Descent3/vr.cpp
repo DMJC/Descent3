@@ -429,6 +429,61 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
   gl.disable(GL_BLEND);
   gl.enable(GL_TEXTURE_2D);
 
+  // Preferred path: emulate curved projection by copying menu texture strips
+  // into curved destination strip positions (no fixed-function immediate mode).
+  if (Vr_menu_fbo != 0 && gl.copy_tex_sub_image_2d && gl.bind_texture) {
+    gl.bind_texture(GL_TEXTURE_2D, surface.texture);
+
+    const int dst_w = static_cast<int>(Vr_submit_width);
+    const int dst_h = static_cast<int>(Vr_submit_height);
+    const int src_w = std::max(1, Vr_menu_width);
+    const int src_h = std::max(1, Vr_menu_height);
+    const int segments = 96;
+    const float curve_half_angle = 0.9f;
+
+    for (int i = 0; i < segments; ++i) {
+      const float t0 = static_cast<float>(i) / static_cast<float>(segments);
+      const float t1 = static_cast<float>(i + 1) / static_cast<float>(segments);
+      const float a0 = (t0 * 2.0f - 1.0f) * curve_half_angle;
+      const float a1 = (t1 * 2.0f - 1.0f) * curve_half_angle;
+
+      const float x0_ndc = std::sin(a0) * 0.80f;
+      const float x1_ndc = std::sin(a1) * 0.80f;
+      int dx0 = static_cast<int>((x0_ndc * 0.5f + 0.5f) * static_cast<float>(dst_w));
+      int dx1 = static_cast<int>((x1_ndc * 0.5f + 0.5f) * static_cast<float>(dst_w));
+      if (dx1 < dx0) {
+        std::swap(dx0, dx1);
+      }
+      dx0 = std::max(0, std::min(dst_w - 1, dx0));
+      dx1 = std::max(0, std::min(dst_w - 1, dx1));
+      const int dw = std::max(1, dx1 - dx0 + 1);
+
+      const float mid = 0.5f * (a0 + a1);
+      const float half_h_ndc = 0.20f + 0.18f * std::cos(mid);
+      int dy0 = static_cast<int>((0.5f - half_h_ndc) * static_cast<float>(dst_h));
+      int dy1 = static_cast<int>((0.5f + half_h_ndc) * static_cast<float>(dst_h));
+      dy0 = std::max(0, std::min(dst_h - 1, dy0));
+      dy1 = std::max(0, std::min(dst_h - 1, dy1));
+      const int dh = std::max(1, dy1 - dy0 + 1);
+
+      int sx0 = static_cast<int>(t0 * static_cast<float>(src_w));
+      int sx1 = static_cast<int>(t1 * static_cast<float>(src_w));
+      if (sx1 < sx0) {
+        std::swap(sx0, sx1);
+      }
+      sx0 = std::max(0, std::min(src_w - 1, sx0));
+      sx1 = std::max(sx0, std::min(src_w - 1, sx1));
+
+      const int sh = std::min(src_h, dh);
+      const int sy0 = std::max(0, (src_h - sh) / 2);
+
+      gl.bind_framebuffer(GL_FRAMEBUFFER, Vr_menu_fbo);
+      gl.copy_tex_sub_image_2d(GL_TEXTURE_2D, 0, dx0, dy0, sx0, sy0, std::min(dw, sx1 - sx0 + 1), sh);
+    }
+
+    return true;
+  }
+
   gl.matrix_mode(GL_PROJECTION);
   gl.push_matrix();
   gl.load_identity();
