@@ -56,6 +56,10 @@ int Vr_menu_texture_size = 0;
 bool Vr_menu_texture_registered = false;
 bool Vr_menu_fbo_support_missing_logged = false;
 bool Vr_curved_menu_unavailable_logged = false;
+bool Vr_menu_submit_path_logged = false;
+uint32_t Vr_menu_eye_offset_log_count = 0;
+bool Vr_ipd_logged = false;
+uint32_t Vr_submit_frame_counter = 0;
 
 struct VrGlFns {
   bool loaded = false;
@@ -73,16 +77,19 @@ struct VrGlFns {
   using CheckFramebufferStatusFn = GLenum (*)(GLenum);
   using GetIntegervFn = void (*)(GLenum, GLint *);
   using ViewportFn = void (*)(GLint, GLint, GLsizei, GLsizei);
+  using ScissorFn = decltype(&glScissor);
   using ClearColorFn = decltype(&glClearColor);
   using ClearFn = decltype(&glClear);
   using DisableFn = decltype(&glDisable);
   using EnableFn = decltype(&glEnable);
+  using BlendFuncFn = decltype(&glBlendFunc);
   using MatrixModeFn = decltype(&glMatrixMode);
   using PushMatrixFn = decltype(&glPushMatrix);
   using PopMatrixFn = decltype(&glPopMatrix);
   using LoadIdentityFn = decltype(&glLoadIdentity);
   using FrustumFn = decltype(&glFrustum);
   using TranslatefFn = decltype(&glTranslatef);
+  using Color4fFn = decltype(&glColor4f);
   using BeginFn = decltype(&glBegin);
   using EndFn = decltype(&glEnd);
   using TexCoord2fFn = decltype(&glTexCoord2f);
@@ -102,16 +109,19 @@ struct VrGlFns {
   CheckFramebufferStatusFn check_framebuffer_status = nullptr;
   GetIntegervFn get_integerv = nullptr;
   ViewportFn viewport = nullptr;
+  ScissorFn scissor = nullptr;
   ClearColorFn clear_color = nullptr;
   ClearFn clear = nullptr;
   DisableFn disable = nullptr;
   EnableFn enable = nullptr;
+  BlendFuncFn blend_func = nullptr;
   MatrixModeFn matrix_mode = nullptr;
   PushMatrixFn push_matrix = nullptr;
   PopMatrixFn pop_matrix = nullptr;
   LoadIdentityFn load_identity = nullptr;
   FrustumFn frustum = nullptr;
   TranslatefFn translatef = nullptr;
+  Color4fFn color4f = nullptr;
   BeginFn begin = nullptr;
   EndFn end = nullptr;
   TexCoord2fFn tex_coord2f = nullptr;
@@ -166,16 +176,19 @@ VrGlFns &VR_GetGlFns() {
       load_proc("glCheckFramebufferStatus", "glCheckFramebufferStatusEXT", "glCheckFramebufferStatusARB"));
   fns.get_integerv = reinterpret_cast<VrGlFns::GetIntegervFn>(load_proc("glGetIntegerv"));
   fns.viewport = reinterpret_cast<VrGlFns::ViewportFn>(load_proc("glViewport"));
+  fns.scissor = reinterpret_cast<VrGlFns::ScissorFn>(load_proc("glScissor"));
   fns.clear_color = reinterpret_cast<VrGlFns::ClearColorFn>(load_proc("glClearColor"));
   fns.clear = reinterpret_cast<VrGlFns::ClearFn>(load_proc("glClear"));
   fns.disable = reinterpret_cast<VrGlFns::DisableFn>(load_proc("glDisable"));
   fns.enable = reinterpret_cast<VrGlFns::EnableFn>(load_proc("glEnable"));
+  fns.blend_func = reinterpret_cast<VrGlFns::BlendFuncFn>(load_proc("glBlendFunc"));
   fns.matrix_mode = reinterpret_cast<VrGlFns::MatrixModeFn>(load_proc("glMatrixMode"));
   fns.push_matrix = reinterpret_cast<VrGlFns::PushMatrixFn>(load_proc("glPushMatrix"));
   fns.pop_matrix = reinterpret_cast<VrGlFns::PopMatrixFn>(load_proc("glPopMatrix"));
   fns.load_identity = reinterpret_cast<VrGlFns::LoadIdentityFn>(load_proc("glLoadIdentity"));
   fns.frustum = reinterpret_cast<VrGlFns::FrustumFn>(load_proc("glFrustum"));
   fns.translatef = reinterpret_cast<VrGlFns::TranslatefFn>(load_proc("glTranslatef"));
+  fns.color4f = reinterpret_cast<VrGlFns::Color4fFn>(load_proc("glColor4f"));
   fns.begin = reinterpret_cast<VrGlFns::BeginFn>(load_proc("glBegin"));
   fns.end = reinterpret_cast<VrGlFns::EndFn>(load_proc("glEnd"));
   fns.tex_coord2f = reinterpret_cast<VrGlFns::TexCoord2fFn>(load_proc("glTexCoord2f"));
@@ -260,6 +273,27 @@ void VR_UpdateSubmitSurface(const NewBitmap &screenshot, VrSubmitSurface &surfac
   gl.tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, Vr_submit_width, Vr_submit_height, GL_RGBA, GL_UNSIGNED_BYTE, surface.buffer.data());
 }
 
+bool VR_FillSubmitSurfaceSolidColor(VrSubmitSurface &surface, uint32_t rgba_color) {
+  if (surface.texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
+    return false;
+  }
+
+  auto &gl = VR_GetGlFns();
+  if (!gl.bind_texture || !gl.tex_sub_image_2d) {
+    return false;
+  }
+
+  if (surface.buffer.size() != static_cast<size_t>(Vr_submit_width * Vr_submit_height)) {
+    surface.buffer.assign(static_cast<size_t>(Vr_submit_width * Vr_submit_height), rgba_color);
+  } else {
+    std::fill(surface.buffer.begin(), surface.buffer.end(), rgba_color);
+  }
+
+  gl.bind_texture(GL_TEXTURE_2D, surface.texture);
+  gl.tex_sub_image_2d(GL_TEXTURE_2D, 0, 0, 0, Vr_submit_width, Vr_submit_height, GL_RGBA, GL_UNSIGNED_BYTE, surface.buffer.data());
+  return true;
+}
+
 void VR_EnsureMenuBitmap() {
   if (!Vr_openvr_ready || Renderer_type != RENDERER_OPENGL || Vr_submit_width == 0 || Vr_submit_height == 0) {
     return;
@@ -342,6 +376,19 @@ bool VR_SubmitOpenVrFrame(GLuint left_texture, GLuint right_texture) {
     return false;
   }
 
+  ++Vr_submit_frame_counter;
+  const auto &hmd_pose = tracked_device_pose[vr::k_unTrackedDeviceIndex_Hmd];
+  if (!hmd_pose.bPoseIsValid) {
+    if (Vr_submit_frame_counter <= 5 || (Vr_submit_frame_counter % 300u) == 0u) {
+      LOG_WARNING.printf("OpenVR HMD pose invalid (frame=%u, connected=%d)", Vr_submit_frame_counter,
+                         hmd_pose.bDeviceIsConnected ? 1 : 0);
+    }
+  } else if (Vr_submit_frame_counter <= 5 || (Vr_submit_frame_counter % 300u) == 0u) {
+    const auto &m = hmd_pose.mDeviceToAbsoluteTracking;
+    LOG_INFO.printf("OpenVR HMD pose (frame=%u): pos=(%.3f, %.3f, %.3f)", Vr_submit_frame_counter, m.m[0][3], m.m[1][3],
+                    m.m[2][3]);
+  }
+
   vr::Texture_t left = {reinterpret_cast<void *>(static_cast<uintptr_t>(left_texture)), vr::TextureType_OpenGL, vr::ColorSpace_Gamma};
   vr::Texture_t right = {reinterpret_cast<void *>(static_cast<uintptr_t>(right_texture)), vr::TextureType_OpenGL, vr::ColorSpace_Gamma};
 
@@ -382,7 +429,98 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
 
   gl.disable(GL_DEPTH_TEST);
   gl.disable(GL_CULL_FACE);
+  gl.disable(GL_LIGHTING);
+  gl.enable(GL_BLEND);
+  if (gl.blend_func) {
+    gl.blend_func(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  }
   gl.enable(GL_TEXTURE_2D);
+
+  // Optional strip-copy path.
+  // Disabled to avoid eye-texture-only shifts; use geometry path below so
+  // stereo comes from moving the curved polygon relative to each eye camera.
+  const bool use_strip_copy_curved_path = false;
+  if (use_strip_copy_curved_path && Vr_menu_fbo != 0 && gl.copy_tex_sub_image_2d && gl.bind_texture) {
+    // Enforce alpha blending on this path so copied strips preserve text/menu
+    // transparency when composited into the curved destination surface.
+    gl.enable(GL_BLEND);
+    if (gl.blend_func) {
+      gl.blend_func(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    }
+
+    gl.bind_texture(GL_TEXTURE_2D, surface.texture);
+
+    const int dst_w = static_cast<int>(Vr_submit_width);
+    const int dst_h = static_cast<int>(Vr_submit_height);
+    const int src_w = std::max(1, Vr_menu_width);
+    const int src_h = std::max(1, Vr_menu_height);
+    const int segments = 128;
+    const float curve_half_angle = 0.9f;
+    const float menu_distance = 1.25f;
+
+    const float panel_width = static_cast<float>(dst_w) * 0.62f;
+    const float panel_height = static_cast<float>(dst_h) * 0.68f;
+    // Use a conservative convergence amount and sign so both eyes stay on a
+    // unified menu page without opposing left/right half selection.
+    const float convergence_scale = 0.20f;
+    const float requested_eye_shift_ndc = (eye_offset / menu_distance) * convergence_scale;
+    const float requested_eye_shift_pixels = requested_eye_shift_ndc * (0.5f * static_cast<float>(dst_w));
+    const float max_shift_pixels = panel_width * 0.15f;
+    const float eye_shift_pixels = std::clamp(requested_eye_shift_pixels, -max_shift_pixels, max_shift_pixels);
+    const float eye_shift_ndc = eye_shift_pixels / (0.5f * static_cast<float>(dst_w));
+    const float panel_center_x = 0.5f * static_cast<float>(dst_w) + eye_shift_pixels;
+    // Keep source sampling centered so we don't cancel perceived stereo by
+    // shifting both destination placement and source sampling together.
+    const float src_shift_pixels = 0.0f;
+
+    if (Vr_menu_eye_offset_log_count < 4) {
+      LOG_INFO.printf(
+          "VR curved strip eye offset: eye_offset=%.5f m, req_shift_ndc=%.5f req_shift_px=%.2f, applied_shift_ndc=%.5f applied_shift_px=%.2f",
+          eye_offset, requested_eye_shift_ndc, requested_eye_shift_pixels, eye_shift_ndc, eye_shift_pixels);
+      ++Vr_menu_eye_offset_log_count;
+    }
+    const float panel_center_y = 0.5f * static_cast<float>(dst_h);
+    const int panel_y0 = std::max(0, static_cast<int>(panel_center_y - panel_height * 0.5f));
+    const int panel_y1 = std::min(dst_h - 1, static_cast<int>(panel_center_y + panel_height * 0.5f));
+
+    for (int i = 0; i < segments; ++i) {
+      const float t0 = static_cast<float>(i) / static_cast<float>(segments);
+      const float t1 = static_cast<float>(i + 1) / static_cast<float>(segments);
+      const float a0 = (t0 * 2.0f - 1.0f) * curve_half_angle;
+      const float a1 = (t1 * 2.0f - 1.0f) * curve_half_angle;
+
+      const float x0 = panel_center_x + (std::sin(a0) / std::sin(curve_half_angle)) * (panel_width * 0.5f);
+      const float x1 = panel_center_x + (std::sin(a1) / std::sin(curve_half_angle)) * (panel_width * 0.5f);
+      int dx0 = static_cast<int>(x0);
+      int dx1 = static_cast<int>(x1);
+      if (dx1 < dx0) {
+        std::swap(dx0, dx1);
+      }
+      dx0 = std::max(0, std::min(dst_w - 1, dx0));
+      dx1 = std::max(0, std::min(dst_w - 1, dx1));
+      const int dw = std::max(1, dx1 - dx0 + 1);
+
+      const int dy0 = panel_y0;
+      const int dy1 = panel_y1;
+      const int dh = std::max(1, dy1 - dy0 + 1);
+
+      int sx0 = static_cast<int>(t0 * static_cast<float>(src_w) + src_shift_pixels);
+      int sx1 = static_cast<int>(t1 * static_cast<float>(src_w) + src_shift_pixels);
+      if (sx1 < sx0) {
+        std::swap(sx0, sx1);
+      }
+      sx0 = std::max(0, std::min(src_w - 1, sx0));
+      sx1 = std::max(sx0, std::min(src_w - 1, sx1));
+
+      const int sh = std::min(src_h, dh);
+      const int sy0 = std::max(0, (src_h - sh) / 2);
+
+      gl.bind_framebuffer(GL_FRAMEBUFFER, Vr_menu_fbo);
+      gl.copy_tex_sub_image_2d(GL_TEXTURE_2D, 0, dx0, dy0, sx0, sy0, std::min(dw, sx1 - sx0 + 1), sh);
+    }
+
+    return true;
+  }
 
   gl.matrix_mode(GL_PROJECTION);
   gl.push_matrix();
@@ -400,10 +538,24 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
   const float menu_distance = 1.25f;
   gl.translatef(-eye_offset, 0.0f, -menu_distance);
 
+  if (Vr_menu_eye_offset_log_count < 4) {
+    LOG_INFO.printf("VR curved geometry eye offset: eye_offset=%.5f m (translate_x=%.5f)", eye_offset, -eye_offset);
+    ++Vr_menu_eye_offset_log_count;
+  }
+
   const float radius = 1.15f;
   const float arc_half_angle = 0.85f;
   const float screen_height = 1.15f;
   const int segments = 64;
+  const float z_bias = -0.75f;
+
+  const float u_max = (Vr_menu_texture_size > 0) ? (static_cast<float>(Vr_menu_width) / static_cast<float>(Vr_menu_texture_size)) : 1.0f;
+  const float v_max = (Vr_menu_texture_size > 0) ? (static_cast<float>(Vr_menu_height) / static_cast<float>(Vr_menu_texture_size)) : 1.0f;
+
+  // Keep base vertex color neutral so menu texture displays unmodified.
+  if (gl.color4f) {
+    gl.color4f(1.0f, 1.0f, 1.0f, 1.0f);
+  }
 
   gl.bind_texture(GL_TEXTURE_2D, Vr_menu_fbo_texture);
   gl.begin(GL_QUAD_STRIP);
@@ -411,11 +563,13 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
     const float t = static_cast<float>(i) / static_cast<float>(segments);
     const float angle = (t * 2.0f - 1.0f) * arc_half_angle;
     const float x = std::sin(angle) * radius;
-    const float z = (std::cos(angle) * radius) - radius;
+    // Keep the whole curved debug surface safely in front of the camera along -Z.
+    const float z = ((std::cos(angle) * radius) - radius) + z_bias;
 
-    gl.tex_coord2f(t, 1.0f);
+    const float u = t * u_max;
+    gl.tex_coord2f(u, v_max);
     gl.vertex3f(x, screen_height * 0.5f, z);
-    gl.tex_coord2f(t, 0.0f);
+    gl.tex_coord2f(u, 0.0f);
     gl.vertex3f(x, -screen_height * 0.5f, z);
   }
   gl.end();
@@ -467,6 +621,15 @@ void VR_InitStereoFrustums() {
   const auto eye_to_head_left = Vr_system->GetEyeToHeadTransform(vr::Eye_Left);
   const auto eye_to_head_right = Vr_system->GetEyeToHeadTransform(vr::Eye_Right);
   Vr_eye_separation = std::fabs(eye_to_head_right.m[0][3] - eye_to_head_left.m[0][3]);
+
+  if (!Vr_ipd_logged) {
+    LOG_INFO.printf("OpenVR eye-to-head offsets: left_x=%.6f right_x=%.6f -> IPD=%.3f mm", eye_to_head_left.m[0][3],
+                    eye_to_head_right.m[0][3], Vr_eye_separation * 1000.0f);
+    if (Vr_eye_separation < 0.045f || Vr_eye_separation > 0.085f) {
+      LOG_WARNING.printf("OpenVR reported unusual IPD %.3f mm", Vr_eye_separation * 1000.0f);
+    }
+    Vr_ipd_logged = true;
+  }
 
   g3_SetStereoFrustum(&left_frustum, &right_frustum);
 }
@@ -553,9 +716,6 @@ void VR_RenderMenuFrame() {
   }
 
   VR_EnsureMenuBitmap();
-  if (Vr_menu_fbo_texture == 0) {
-    return;
-  }
 
   if (!VR_EnsureSubmitSurface(Vr_submit_left) || !VR_EnsureSubmitSurface(Vr_submit_right)) {
     return;
@@ -568,22 +728,44 @@ void VR_RenderMenuFrame() {
 
   bool left_curved = false;
   bool right_curved = false;
+  bool flat_copy = false;
 
+  // Prefer curved rendering first so the menu is presented as curved geometry.
+  // Fall back to flat copy only if curved rendering is unavailable.
   if (Vr_submit_fbo != 0) {
+    // Render curved menu with per-eye offsets so stereo converges naturally.
     left_curved = VR_RenderCurvedMenuToSurface(Vr_submit_left, -0.5f * Vr_eye_separation);
     right_curved = VR_RenderCurvedMenuToSurface(Vr_submit_right, 0.5f * Vr_eye_separation);
   }
 
   if (!left_curved || !right_curved) {
+    flat_copy = VR_CopyMenuToSubmitSurface(Vr_submit_left) && VR_CopyMenuToSubmitSurface(Vr_submit_right);
+  }
+
+  if (!Vr_menu_submit_path_logged) {
+    LOG_INFO.printf("VR menu submit path: flat_copy=%d curved_left=%d curved_right=%d submit_fbo=%u eye_sep=%.3fmm",
+                    flat_copy ? 1 : 0, left_curved ? 1 : 0, right_curved ? 1 : 0, static_cast<unsigned int>(Vr_submit_fbo),
+                    Vr_eye_separation * 1000.0f);
+    Vr_menu_submit_path_logged = true;
+  }
+
+  if (!flat_copy && (!left_curved || !right_curved)) {
     if (!Vr_curved_menu_unavailable_logged) {
       LOG_WARNING << "VR: Curved menu render path unavailable; falling back to flat menu submit.";
       Vr_curved_menu_unavailable_logged = true;
     }
 
     if (!VR_CopyMenuToSubmitSurface(Vr_submit_left) || !VR_CopyMenuToSubmitSurface(Vr_submit_right)) {
+      LOG_WARNING << "VR: Menu copy path unavailable; submitting solid debug color frame.";
+
+      VR_FillSubmitSurfaceSolidColor(Vr_submit_left, 0xFFFF00FFu);
+      VR_FillSubmitSurfaceSolidColor(Vr_submit_right, 0xFFFF00FFu);
+
       if (gl.bind_framebuffer) {
         gl.bind_framebuffer(GL_FRAMEBUFFER, 0);
       }
+
+      VR_SubmitOpenVrFrame(Vr_submit_left.texture, Vr_submit_right.texture);
       return;
     }
   }
@@ -613,6 +795,8 @@ void VR_ResetGraphicsResources() {
   auto &gl = VR_GetGlFns();
   VR_DeleteSubmitSurface(Vr_submit_left);
   VR_DeleteSubmitSurface(Vr_submit_right);
+  Vr_menu_submit_path_logged = false;
+  Vr_menu_eye_offset_log_count = 0;
 
   if (Vr_menu_fbo != 0 && gl.delete_framebuffers) gl.delete_framebuffers(1, &Vr_menu_fbo);
   if (Vr_submit_fbo != 0 && gl.delete_framebuffers) gl.delete_framebuffers(1, &Vr_submit_fbo);
