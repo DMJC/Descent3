@@ -458,14 +458,18 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
 
     const float panel_width = static_cast<float>(dst_w) * 0.62f;
     const float panel_height = static_cast<float>(dst_h) * 0.68f;
-    const float convergence_scale = 1.75f;
-    const float eye_shift_ndc = (-eye_offset / menu_distance) * convergence_scale;
-    const float eye_shift_pixels = eye_shift_ndc * (0.5f * static_cast<float>(dst_w));
+    const float convergence_scale = 0.55f;
+    const float requested_eye_shift_ndc = (-eye_offset / menu_distance) * convergence_scale;
+    const float requested_eye_shift_pixels = requested_eye_shift_ndc * (0.5f * static_cast<float>(dst_w));
+    const float max_shift_pixels = panel_width * 0.08f;
+    const float eye_shift_pixels = std::clamp(requested_eye_shift_pixels, -max_shift_pixels, max_shift_pixels);
+    const float eye_shift_ndc = eye_shift_pixels / (0.5f * static_cast<float>(dst_w));
     const float panel_center_x = 0.5f * static_cast<float>(dst_w) + eye_shift_pixels;
 
     if (Vr_menu_eye_offset_log_count < 4) {
-      LOG_INFO.printf("VR curved strip eye offset: eye_offset=%.5f m, shift_ndc=%.5f, shift_px=%.2f", eye_offset, eye_shift_ndc,
-                      eye_shift_pixels);
+      LOG_INFO.printf(
+          "VR curved strip eye offset: eye_offset=%.5f m, req_shift_ndc=%.5f req_shift_px=%.2f, applied_shift_ndc=%.5f applied_shift_px=%.2f",
+          eye_offset, requested_eye_shift_ndc, requested_eye_shift_pixels, eye_shift_ndc, eye_shift_pixels);
       ++Vr_menu_eye_offset_log_count;
     }
     const float panel_center_y = 0.5f * static_cast<float>(dst_h);
