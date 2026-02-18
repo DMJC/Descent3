@@ -435,10 +435,16 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
   }
   gl.enable(GL_TEXTURE_2D);
 
-  // Optional strip-copy path. Disabled by default because it can create
-  // character/background block artifacts on alpha-heavy menu text.
-  const bool use_strip_copy_curved_path = false;
+  // Optional strip-copy path.
+  const bool use_strip_copy_curved_path = true;
   if (use_strip_copy_curved_path && Vr_menu_fbo != 0 && gl.copy_tex_sub_image_2d && gl.bind_texture) {
+    // Enforce alpha blending on this path so copied strips preserve text/menu
+    // transparency when composited into the curved destination surface.
+    gl.enable(GL_BLEND);
+    if (gl.blend_func) {
+      gl.blend_func(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    }
+
     gl.bind_texture(GL_TEXTURE_2D, surface.texture);
 
     const int dst_w = static_cast<int>(Vr_submit_width);
