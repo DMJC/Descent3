@@ -458,8 +458,10 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
 
     const float panel_width = static_cast<float>(dst_w) * 0.62f;
     const float panel_height = static_cast<float>(dst_h) * 0.68f;
-    const float convergence_scale = 1.00f;
-    const float requested_eye_shift_ndc = (-eye_offset / menu_distance) * convergence_scale;
+    // Use a conservative convergence amount and sign so both eyes stay on a
+    // unified menu page without opposing left/right half selection.
+    const float convergence_scale = 0.20f;
+    const float requested_eye_shift_ndc = (eye_offset / menu_distance) * convergence_scale;
     const float requested_eye_shift_pixels = requested_eye_shift_ndc * (0.5f * static_cast<float>(dst_w));
     const float max_shift_pixels = panel_width * 0.15f;
     const float eye_shift_pixels = std::clamp(requested_eye_shift_pixels, -max_shift_pixels, max_shift_pixels);
