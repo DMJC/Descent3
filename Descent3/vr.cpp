@@ -438,8 +438,15 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
     const int dst_h = static_cast<int>(Vr_submit_height);
     const int src_w = std::max(1, Vr_menu_width);
     const int src_h = std::max(1, Vr_menu_height);
-    const int segments = 96;
+    const int segments = 128;
     const float curve_half_angle = 0.9f;
+
+    const float panel_width = static_cast<float>(dst_w) * 0.62f;
+    const float panel_height = static_cast<float>(dst_h) * 0.68f;
+    const float panel_center_x = 0.5f * static_cast<float>(dst_w);
+    const float panel_center_y = 0.5f * static_cast<float>(dst_h);
+    const int panel_y0 = std::max(0, static_cast<int>(panel_center_y - panel_height * 0.5f));
+    const int panel_y1 = std::min(dst_h - 1, static_cast<int>(panel_center_y + panel_height * 0.5f));
 
     for (int i = 0; i < segments; ++i) {
       const float t0 = static_cast<float>(i) / static_cast<float>(segments);
@@ -447,10 +454,10 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
       const float a0 = (t0 * 2.0f - 1.0f) * curve_half_angle;
       const float a1 = (t1 * 2.0f - 1.0f) * curve_half_angle;
 
-      const float x0_ndc = std::sin(a0) * 0.80f;
-      const float x1_ndc = std::sin(a1) * 0.80f;
-      int dx0 = static_cast<int>((x0_ndc * 0.5f + 0.5f) * static_cast<float>(dst_w));
-      int dx1 = static_cast<int>((x1_ndc * 0.5f + 0.5f) * static_cast<float>(dst_w));
+      const float x0 = panel_center_x + (std::sin(a0) / std::sin(curve_half_angle)) * (panel_width * 0.5f);
+      const float x1 = panel_center_x + (std::sin(a1) / std::sin(curve_half_angle)) * (panel_width * 0.5f);
+      int dx0 = static_cast<int>(x0);
+      int dx1 = static_cast<int>(x1);
       if (dx1 < dx0) {
         std::swap(dx0, dx1);
       }
@@ -458,12 +465,8 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
       dx1 = std::max(0, std::min(dst_w - 1, dx1));
       const int dw = std::max(1, dx1 - dx0 + 1);
 
-      const float mid = 0.5f * (a0 + a1);
-      const float half_h_ndc = 0.20f + 0.18f * std::cos(mid);
-      int dy0 = static_cast<int>((0.5f - half_h_ndc) * static_cast<float>(dst_h));
-      int dy1 = static_cast<int>((0.5f + half_h_ndc) * static_cast<float>(dst_h));
-      dy0 = std::max(0, std::min(dst_h - 1, dy0));
-      dy1 = std::max(0, std::min(dst_h - 1, dy1));
+      const int dy0 = panel_y0;
+      const int dy1 = panel_y1;
       const int dh = std::max(1, dy1 - dy0 + 1);
 
       int sx0 = static_cast<int>(t0 * static_cast<float>(src_w));
