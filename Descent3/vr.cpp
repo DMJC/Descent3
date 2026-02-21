@@ -772,7 +772,7 @@ void VR_RenderMenuFrame() {
 
   // Debug override: write solid eye colors directly into submit textures to verify
   // OpenVR submission/compositor path independently of curved mesh rendering.
-  const bool force_solid_submit_debug = true;
+  const bool force_solid_submit_debug = false;
   if (Vr_submit_fbo != 0 && force_solid_submit_debug) {
     left_curved = VR_FillSubmitSurfaceSolid(Vr_submit_left, 1.0f, 0.0f, 1.0f);   // magenta left eye
     right_curved = VR_FillSubmitSurfaceSolid(Vr_submit_right, 0.0f, 1.0f, 1.0f); // cyan right eye
