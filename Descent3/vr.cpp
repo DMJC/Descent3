@@ -337,18 +337,16 @@ void VR_EnsureMenuBitmap() {
   Vr_menu_texture_size = desired_texture_size;
 }
 
-bool VR_SubmitOpenVrFrame(GLuint left_texture, GLuint right_texture, bool wait_for_poses) {
+bool VR_SubmitOpenVrFrame(GLuint left_texture, GLuint right_texture) {
   if (!Vr_openvr_ready || Vr_compositor == nullptr || left_texture == 0 || right_texture == 0) {
     return false;
   }
 
-  if (wait_for_poses) {
-    vr::TrackedDevicePose_t tracked_device_pose[vr::k_unMaxTrackedDeviceCount]{};
-    const auto wait_err = Vr_compositor->WaitGetPoses(tracked_device_pose, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
-    if (wait_err != vr::VRCompositorError_None) {
-      LOG_WARNING.printf("OpenVR WaitGetPoses failed with error code %d", static_cast<int>(wait_err));
-      return false;
-    }
+  vr::TrackedDevicePose_t tracked_device_pose[vr::k_unMaxTrackedDeviceCount]{};
+  const auto wait_err = Vr_compositor->WaitGetPoses(tracked_device_pose, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
+  if (wait_err != vr::VRCompositorError_None) {
+    LOG_WARNING.printf("OpenVR WaitGetPoses failed with error code %d", static_cast<int>(wait_err));
+    return false;
   }
 
   vr::Texture_t left = {reinterpret_cast<void *>(static_cast<uintptr_t>(left_texture)), vr::TextureType_OpenGL, vr::ColorSpace_Gamma};
@@ -392,19 +390,6 @@ VrRigidTransform VR_FromOpenVr34(const vr::HmdMatrix34_t &src) {
   for (int row = 0; row < 3; ++row) {
     for (int col = 0; col < 4; ++col) {
       out.m[row][col] = src.m[row][col];
-    }
-  }
-  return out;
-}
-
-VrRigidTransform VR_MultiplyTransform(const VrRigidTransform &a, const VrRigidTransform &b) {
-  VrRigidTransform out{};
-  for (int row = 0; row < 4; ++row) {
-    for (int col = 0; col < 4; ++col) {
-      out.m[row][col] = 0.0f;
-      for (int k = 0; k < 4; ++k) {
-        out.m[row][col] += a.m[row][k] * b.m[k][col];
-      }
     }
   }
   return out;
@@ -462,18 +447,14 @@ bool VR_BuildMenuPoseMatrices(VrPoseMatrices &out_pose) {
     return false;
   }
 
-  const VrRigidTransform head_to_absolute = VR_FromOpenVr34(hmd_pose.mDeviceToAbsoluteTracking);
   const VrRigidTransform eye_to_head_left = VR_FromOpenVr34(Vr_system->GetEyeToHeadTransform(vr::Eye_Left));
   const VrRigidTransform eye_to_head_right = VR_FromOpenVr34(Vr_system->GetEyeToHeadTransform(vr::Eye_Right));
 
-  const VrRigidTransform eye_left_to_absolute = VR_MultiplyTransform(head_to_absolute, eye_to_head_left);
-  const VrRigidTransform eye_right_to_absolute = VR_MultiplyTransform(head_to_absolute, eye_to_head_right);
-
-  const VrRigidTransform left_eye_view = VR_InvertRigidTransform(eye_left_to_absolute);
-  const VrRigidTransform right_eye_view = VR_InvertRigidTransform(eye_right_to_absolute);
-
-  // Head-anchored cinema screen in front of the user, avoiding direct eye-buffer UI compositing.
-  const VrRigidTransform menu_model = VR_MultiplyTransform(head_to_absolute, VR_Translation(0.0f, 0.0f, -1.25f));
+  // For head-anchored cinema menus, keep the menu surface in eye space and apply only
+  // per-eye offsets from OpenVR eye transforms to avoid world-space transform mismatch.
+  const VrRigidTransform left_eye_view = VR_InvertRigidTransform(eye_to_head_left);
+  const VrRigidTransform right_eye_view = VR_InvertRigidTransform(eye_to_head_right);
+  const VrRigidTransform menu_model = VR_Translation(0.0f, 0.0f, -1.25f);
 
   out_pose.left_eye_view = VR_ToOpenGlColumnMajor(left_eye_view);
   out_pose.right_eye_view = VR_ToOpenGlColumnMajor(right_eye_view);
@@ -719,7 +700,7 @@ void VR_RenderMenuFrame() {
     gl.bind_framebuffer(GL_FRAMEBUFFER, 0);
   }
 
-  VR_SubmitOpenVrFrame(Vr_submit_left.texture, Vr_submit_right.texture, false);
+  VR_SubmitOpenVrFrame(Vr_submit_left.texture, Vr_submit_right.texture);
 }
 
 void VR_SubmitStereoFrame(const NewBitmap &left, const NewBitmap &right) {
@@ -733,7 +714,7 @@ void VR_SubmitStereoFrame(const NewBitmap &left, const NewBitmap &right) {
 
   VR_UpdateSubmitSurface(left, Vr_submit_left);
   VR_UpdateSubmitSurface(right, Vr_submit_right);
-  VR_SubmitOpenVrFrame(Vr_submit_left.texture, Vr_submit_right.texture, true);
+  VR_SubmitOpenVrFrame(Vr_submit_left.texture, Vr_submit_right.texture);
 }
 
 void VR_ResetGraphicsResources() {
