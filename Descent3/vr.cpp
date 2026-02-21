@@ -620,6 +620,29 @@ bool VR_CopyMenuToSubmitSurface(const VrSubmitSurface &surface) {
   return true;
 }
 
+bool VR_FillSubmitSurfaceSolid(const VrSubmitSurface &surface, float r, float g, float b) {
+  if (surface.texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
+    return false;
+  }
+
+  auto &gl = VR_GetGlFns();
+  if (!gl.bind_framebuffer || !gl.framebuffer_texture_2d || !gl.viewport || !gl.check_framebuffer_status ||
+      !gl.clear_color || !gl.clear) {
+    return false;
+  }
+
+  gl.bind_framebuffer(GL_FRAMEBUFFER, Vr_submit_fbo);
+  gl.framebuffer_texture_2d(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, surface.texture, 0);
+  if (gl.check_framebuffer_status(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    return false;
+  }
+
+  gl.viewport(0, 0, static_cast<GLsizei>(Vr_submit_width), static_cast<GLsizei>(Vr_submit_height));
+  gl.clear_color(r, g, b, 1.0f);
+  gl.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  return true;
+}
+
 void VR_InitStereoFrustums() {
   if (!Vr_openvr_ready || Vr_system == nullptr) {
     return;
@@ -747,20 +770,28 @@ void VR_RenderMenuFrame() {
   bool right_curved = false;
   VrPoseMatrices pose_matrices;
 
-  // Debug: force fixed-function legacy path to guarantee camera-space placement while
-  // diagnosing black-screen/behind-camera issues in pose-matrix mode.
-  const bool force_legacy_curved_menu = true;
-  const bool have_pose = !force_legacy_curved_menu && VR_BuildMenuPoseMatrices(pose_matrices);
+  // Debug override: write solid eye colors directly into submit textures to verify
+  // OpenVR submission/compositor path independently of curved mesh rendering.
+  const bool force_solid_submit_debug = true;
+  if (Vr_submit_fbo != 0 && force_solid_submit_debug) {
+    left_curved = VR_FillSubmitSurfaceSolid(Vr_submit_left, 1.0f, 0.0f, 1.0f);   // magenta left eye
+    right_curved = VR_FillSubmitSurfaceSolid(Vr_submit_right, 0.0f, 1.0f, 1.0f); // cyan right eye
+  } else {
+    // Debug: force fixed-function legacy path to guarantee camera-space placement while
+    // diagnosing black-screen/behind-camera issues in pose-matrix mode.
+    const bool force_legacy_curved_menu = true;
+    const bool have_pose = !force_legacy_curved_menu && VR_BuildMenuPoseMatrices(pose_matrices);
 
-  if (Vr_submit_fbo != 0 && have_pose) {
-    left_curved = VR_RenderCurvedMenuToSurface(Vr_submit_left, pose_matrices.left_eye_view, pose_matrices.menu_model);
-    right_curved = VR_RenderCurvedMenuToSurface(Vr_submit_right, pose_matrices.right_eye_view, pose_matrices.menu_model);
-  }
+    if (Vr_submit_fbo != 0 && have_pose) {
+      left_curved = VR_RenderCurvedMenuToSurface(Vr_submit_left, pose_matrices.left_eye_view, pose_matrices.menu_model);
+      right_curved = VR_RenderCurvedMenuToSurface(Vr_submit_right, pose_matrices.right_eye_view, pose_matrices.menu_model);
+    }
 
-  if (Vr_submit_fbo != 0 && (!left_curved || !right_curved)) {
-    const float eye_offset = Vr_eye_separation * 0.5f;
-    left_curved = VR_RenderCurvedMenuToSurfaceLegacy(Vr_submit_left, -eye_offset);
-    right_curved = VR_RenderCurvedMenuToSurfaceLegacy(Vr_submit_right, eye_offset);
+    if (Vr_submit_fbo != 0 && (!left_curved || !right_curved)) {
+      const float eye_offset = Vr_eye_separation * 0.5f;
+      left_curved = VR_RenderCurvedMenuToSurfaceLegacy(Vr_submit_left, -eye_offset);
+      right_curved = VR_RenderCurvedMenuToSurfaceLegacy(Vr_submit_right, eye_offset);
+    }
   }
 
   if (!left_curved || !right_curved) {
