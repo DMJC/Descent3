@@ -90,6 +90,7 @@ struct VrGlFns {
   using EndFn = decltype(&glEnd);
   using TexCoord2fFn = decltype(&glTexCoord2f);
   using Vertex3fFn = decltype(&glVertex3f);
+  using Color4fFn = decltype(&glColor4f);
 
   GenTexturesFn gen_textures = nullptr;
   DeleteTexturesFn delete_textures = nullptr;
@@ -121,6 +122,7 @@ struct VrGlFns {
   EndFn end = nullptr;
   TexCoord2fFn tex_coord2f = nullptr;
   Vertex3fFn vertex3f = nullptr;
+  Color4fFn color4f = nullptr;
 };
 
 std::array<GLint, 4> Vr_saved_menu_viewport = {0, 0, 0, 0};
@@ -187,6 +189,7 @@ VrGlFns &VR_GetGlFns() {
   fns.end = reinterpret_cast<VrGlFns::EndFn>(load_proc("glEnd"));
   fns.tex_coord2f = reinterpret_cast<VrGlFns::TexCoord2fFn>(load_proc("glTexCoord2f"));
   fns.vertex3f = reinterpret_cast<VrGlFns::Vertex3fFn>(load_proc("glVertex3f"));
+  fns.color4f = reinterpret_cast<VrGlFns::Color4fFn>(load_proc("glColor4f"));
   fns.loaded = true;
   return fns;
 }
@@ -473,7 +476,7 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, const std::arr
   if (!gl.bind_framebuffer || !gl.framebuffer_texture_2d || !gl.viewport || !gl.check_framebuffer_status ||
       !gl.clear_color || !gl.clear || !gl.disable || !gl.enable || !gl.matrix_mode || !gl.push_matrix ||
       !gl.pop_matrix || !gl.load_identity || !gl.load_matrixf || !gl.mult_matrixf || !gl.frustum || !gl.begin || !gl.end ||
-      !gl.tex_coord2f || !gl.vertex3f || !gl.bind_texture) {
+      !gl.vertex3f || !gl.color4f) {
     return false;
   }
 
@@ -510,7 +513,9 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, const std::arr
   const float screen_height = 1.15f;
   const int segments = 64;
 
-  gl.bind_texture(GL_TEXTURE_2D, Vr_menu_fbo_texture);
+  // Debug mode: disable menu texturing to verify curved polygon visibility in headset.
+  gl.disable(GL_TEXTURE_2D);
+  gl.color4f(0.0f, 1.0f, 0.0f, 1.0f);
   gl.begin(GL_QUAD_STRIP);
   for (int i = 0; i <= segments; ++i) {
     const float t = static_cast<float>(i) / static_cast<float>(segments);
@@ -518,9 +523,7 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, const std::arr
     const float x = std::sin(angle) * radius;
     const float z = (std::cos(angle) * radius) - radius;
 
-    gl.tex_coord2f(t, 1.0f);
     gl.vertex3f(x, screen_height * 0.5f, z);
-    gl.tex_coord2f(t, 0.0f);
     gl.vertex3f(x, -screen_height * 0.5f, z);
   }
   gl.end();
@@ -541,7 +544,7 @@ bool VR_RenderCurvedMenuToSurfaceLegacy(const VrSubmitSurface &surface, float ey
   if (!gl.bind_framebuffer || !gl.framebuffer_texture_2d || !gl.viewport || !gl.check_framebuffer_status ||
       !gl.clear_color || !gl.clear || !gl.disable || !gl.enable || !gl.matrix_mode || !gl.push_matrix ||
       !gl.pop_matrix || !gl.load_identity || !gl.frustum || !gl.translatef || !gl.begin || !gl.end ||
-      !gl.tex_coord2f || !gl.vertex3f || !gl.bind_texture) {
+      !gl.vertex3f || !gl.color4f) {
     return false;
   }
 
@@ -578,7 +581,9 @@ bool VR_RenderCurvedMenuToSurfaceLegacy(const VrSubmitSurface &surface, float ey
   const float screen_height = 1.15f;
   const int segments = 64;
 
-  gl.bind_texture(GL_TEXTURE_2D, Vr_menu_fbo_texture);
+  // Debug mode: disable menu texturing to verify curved polygon visibility in headset.
+  gl.disable(GL_TEXTURE_2D);
+  gl.color4f(0.0f, 1.0f, 0.0f, 1.0f);
   gl.begin(GL_QUAD_STRIP);
   for (int i = 0; i <= segments; ++i) {
     const float t = static_cast<float>(i) / static_cast<float>(segments);
@@ -586,9 +591,7 @@ bool VR_RenderCurvedMenuToSurfaceLegacy(const VrSubmitSurface &surface, float ey
     const float x = std::sin(angle) * radius;
     const float z = (std::cos(angle) * radius) - radius;
 
-    gl.tex_coord2f(t, 1.0f);
     gl.vertex3f(x, screen_height * 0.5f, z);
-    gl.tex_coord2f(t, 0.0f);
     gl.vertex3f(x, -screen_height * 0.5f, z);
   }
   gl.end();
