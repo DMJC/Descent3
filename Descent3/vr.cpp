@@ -532,6 +532,74 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, const std::arr
   return true;
 }
 
+bool VR_RenderCurvedMenuToSurfaceLegacy(const VrSubmitSurface &surface, float eye_offset) {
+  if (surface.texture == 0 || Vr_menu_fbo_texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
+    return false;
+  }
+
+  auto &gl = VR_GetGlFns();
+  if (!gl.bind_framebuffer || !gl.framebuffer_texture_2d || !gl.viewport || !gl.check_framebuffer_status ||
+      !gl.clear_color || !gl.clear || !gl.disable || !gl.enable || !gl.matrix_mode || !gl.push_matrix ||
+      !gl.pop_matrix || !gl.load_identity || !gl.frustum || !gl.translatef || !gl.begin || !gl.end ||
+      !gl.tex_coord2f || !gl.vertex3f || !gl.bind_texture) {
+    return false;
+  }
+
+  gl.bind_framebuffer(GL_FRAMEBUFFER, Vr_submit_fbo);
+  gl.framebuffer_texture_2d(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, surface.texture, 0);
+  if (gl.check_framebuffer_status(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    return false;
+  }
+
+  gl.viewport(0, 0, static_cast<GLsizei>(Vr_submit_width), static_cast<GLsizei>(Vr_submit_height));
+  gl.clear_color(0.f, 0.f, 0.f, 1.f);
+  gl.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+  gl.disable(GL_DEPTH_TEST);
+  gl.disable(GL_CULL_FACE);
+  gl.enable(GL_TEXTURE_2D);
+
+  gl.matrix_mode(GL_PROJECTION);
+  gl.push_matrix();
+  gl.load_identity();
+  const float near_plane = 0.1f;
+  const float far_plane = 10.0f;
+  const float top = near_plane;
+  const float right = top * (static_cast<float>(Vr_submit_width) / static_cast<float>(Vr_submit_height));
+  gl.frustum(-right, right, -top, top, near_plane, far_plane);
+
+  gl.matrix_mode(GL_MODELVIEW);
+  gl.push_matrix();
+  gl.load_identity();
+  gl.translatef(-eye_offset, 0.0f, -1.25f);
+
+  const float radius = 1.15f;
+  const float arc_half_angle = 0.85f;
+  const float screen_height = 1.15f;
+  const int segments = 64;
+
+  gl.bind_texture(GL_TEXTURE_2D, Vr_menu_fbo_texture);
+  gl.begin(GL_QUAD_STRIP);
+  for (int i = 0; i <= segments; ++i) {
+    const float t = static_cast<float>(i) / static_cast<float>(segments);
+    const float angle = (t * 2.0f - 1.0f) * arc_half_angle;
+    const float x = std::sin(angle) * radius;
+    const float z = (std::cos(angle) * radius) - radius;
+
+    gl.tex_coord2f(t, 1.0f);
+    gl.vertex3f(x, screen_height * 0.5f, z);
+    gl.tex_coord2f(t, 0.0f);
+    gl.vertex3f(x, -screen_height * 0.5f, z);
+  }
+  gl.end();
+
+  gl.pop_matrix();
+  gl.matrix_mode(GL_PROJECTION);
+  gl.pop_matrix();
+  gl.matrix_mode(GL_MODELVIEW);
+  return true;
+}
+
 bool VR_CopyMenuToSubmitSurface(const VrSubmitSurface &surface) {
   if (surface.texture == 0 || Vr_menu_fbo == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
     return false;
@@ -680,6 +748,12 @@ void VR_RenderMenuFrame() {
   if (Vr_submit_fbo != 0 && have_pose) {
     left_curved = VR_RenderCurvedMenuToSurface(Vr_submit_left, pose_matrices.left_eye_view, pose_matrices.menu_model);
     right_curved = VR_RenderCurvedMenuToSurface(Vr_submit_right, pose_matrices.right_eye_view, pose_matrices.menu_model);
+  }
+
+  if (Vr_submit_fbo != 0 && (!left_curved || !right_curved)) {
+    const float eye_offset = Vr_eye_separation * 0.5f;
+    left_curved = VR_RenderCurvedMenuToSurfaceLegacy(Vr_submit_left, -eye_offset);
+    right_curved = VR_RenderCurvedMenuToSurfaceLegacy(Vr_submit_right, eye_offset);
   }
 
   if (!left_curved || !right_curved) {
