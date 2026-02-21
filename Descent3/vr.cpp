@@ -15,6 +15,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <vector>
 
 #include "args.h"
@@ -83,6 +84,8 @@ struct VrGlFns {
   using LoadIdentityFn = decltype(&glLoadIdentity);
   using FrustumFn = decltype(&glFrustum);
   using TranslatefFn = decltype(&glTranslatef);
+  using LoadMatrixfFn = decltype(&glLoadMatrixf);
+  using MultMatrixfFn = decltype(&glMultMatrixf);
   using BeginFn = decltype(&glBegin);
   using EndFn = decltype(&glEnd);
   using TexCoord2fFn = decltype(&glTexCoord2f);
@@ -112,6 +115,8 @@ struct VrGlFns {
   LoadIdentityFn load_identity = nullptr;
   FrustumFn frustum = nullptr;
   TranslatefFn translatef = nullptr;
+  LoadMatrixfFn load_matrixf = nullptr;
+  MultMatrixfFn mult_matrixf = nullptr;
   BeginFn begin = nullptr;
   EndFn end = nullptr;
   TexCoord2fFn tex_coord2f = nullptr;
@@ -176,6 +181,8 @@ VrGlFns &VR_GetGlFns() {
   fns.load_identity = reinterpret_cast<VrGlFns::LoadIdentityFn>(load_proc("glLoadIdentity"));
   fns.frustum = reinterpret_cast<VrGlFns::FrustumFn>(load_proc("glFrustum"));
   fns.translatef = reinterpret_cast<VrGlFns::TranslatefFn>(load_proc("glTranslatef"));
+  fns.load_matrixf = reinterpret_cast<VrGlFns::LoadMatrixfFn>(load_proc("glLoadMatrixf"));
+  fns.mult_matrixf = reinterpret_cast<VrGlFns::MultMatrixfFn>(load_proc("glMultMatrixf"));
   fns.begin = reinterpret_cast<VrGlFns::BeginFn>(load_proc("glBegin"));
   fns.end = reinterpret_cast<VrGlFns::EndFn>(load_proc("glEnd"));
   fns.tex_coord2f = reinterpret_cast<VrGlFns::TexCoord2fFn>(load_proc("glTexCoord2f"));
@@ -330,16 +337,18 @@ void VR_EnsureMenuBitmap() {
   Vr_menu_texture_size = desired_texture_size;
 }
 
-bool VR_SubmitOpenVrFrame(GLuint left_texture, GLuint right_texture) {
+bool VR_SubmitOpenVrFrame(GLuint left_texture, GLuint right_texture, bool wait_for_poses) {
   if (!Vr_openvr_ready || Vr_compositor == nullptr || left_texture == 0 || right_texture == 0) {
     return false;
   }
 
-  vr::TrackedDevicePose_t tracked_device_pose[vr::k_unMaxTrackedDeviceCount]{};
-  const auto wait_err = Vr_compositor->WaitGetPoses(tracked_device_pose, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
-  if (wait_err != vr::VRCompositorError_None) {
-    LOG_WARNING.printf("OpenVR WaitGetPoses failed with error code %d", static_cast<int>(wait_err));
-    return false;
+  if (wait_for_poses) {
+    vr::TrackedDevicePose_t tracked_device_pose[vr::k_unMaxTrackedDeviceCount]{};
+    const auto wait_err = Vr_compositor->WaitGetPoses(tracked_device_pose, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
+    if (wait_err != vr::VRCompositorError_None) {
+      LOG_WARNING.printf("OpenVR WaitGetPoses failed with error code %d", static_cast<int>(wait_err));
+      return false;
+    }
   }
 
   vr::Texture_t left = {reinterpret_cast<void *>(static_cast<uintptr_t>(left_texture)), vr::TextureType_OpenGL, vr::ColorSpace_Gamma};
@@ -357,7 +366,124 @@ bool VR_SubmitOpenVrFrame(GLuint left_texture, GLuint right_texture) {
   return left_err == vr::VRCompositorError_None && right_err == vr::VRCompositorError_None;
 }
 
-bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offset) {
+struct VrPoseMatrices {
+  bool valid = false;
+  std::array<float, 16> left_eye_view = {0.0f};
+  std::array<float, 16> right_eye_view = {0.0f};
+  std::array<float, 16> menu_model = {0.0f};
+};
+
+struct VrRigidTransform {
+  float m[4][4];
+};
+
+VrRigidTransform VR_IdentityTransform() {
+  VrRigidTransform out{};
+  std::memset(out.m, 0, sizeof(out.m));
+  out.m[0][0] = 1.0f;
+  out.m[1][1] = 1.0f;
+  out.m[2][2] = 1.0f;
+  out.m[3][3] = 1.0f;
+  return out;
+}
+
+VrRigidTransform VR_FromOpenVr34(const vr::HmdMatrix34_t &src) {
+  VrRigidTransform out = VR_IdentityTransform();
+  for (int row = 0; row < 3; ++row) {
+    for (int col = 0; col < 4; ++col) {
+      out.m[row][col] = src.m[row][col];
+    }
+  }
+  return out;
+}
+
+VrRigidTransform VR_MultiplyTransform(const VrRigidTransform &a, const VrRigidTransform &b) {
+  VrRigidTransform out{};
+  for (int row = 0; row < 4; ++row) {
+    for (int col = 0; col < 4; ++col) {
+      out.m[row][col] = 0.0f;
+      for (int k = 0; k < 4; ++k) {
+        out.m[row][col] += a.m[row][k] * b.m[k][col];
+      }
+    }
+  }
+  return out;
+}
+
+VrRigidTransform VR_InvertRigidTransform(const VrRigidTransform &src) {
+  VrRigidTransform out = VR_IdentityTransform();
+
+  for (int row = 0; row < 3; ++row) {
+    for (int col = 0; col < 3; ++col) {
+      out.m[row][col] = src.m[col][row];
+    }
+  }
+
+  out.m[0][3] = -(out.m[0][0] * src.m[0][3] + out.m[0][1] * src.m[1][3] + out.m[0][2] * src.m[2][3]);
+  out.m[1][3] = -(out.m[1][0] * src.m[0][3] + out.m[1][1] * src.m[1][3] + out.m[1][2] * src.m[2][3]);
+  out.m[2][3] = -(out.m[2][0] * src.m[0][3] + out.m[2][1] * src.m[1][3] + out.m[2][2] * src.m[2][3]);
+
+  return out;
+}
+
+std::array<float, 16> VR_ToOpenGlColumnMajor(const VrRigidTransform &src) {
+  std::array<float, 16> out{};
+  int idx = 0;
+  for (int col = 0; col < 4; ++col) {
+    for (int row = 0; row < 4; ++row) {
+      out[idx++] = src.m[row][col];
+    }
+  }
+  return out;
+}
+
+VrRigidTransform VR_Translation(float x, float y, float z) {
+  VrRigidTransform out = VR_IdentityTransform();
+  out.m[0][3] = x;
+  out.m[1][3] = y;
+  out.m[2][3] = z;
+  return out;
+}
+
+bool VR_BuildMenuPoseMatrices(VrPoseMatrices &out_pose) {
+  if (!Vr_openvr_ready || Vr_compositor == nullptr || Vr_system == nullptr) {
+    return false;
+  }
+
+  vr::TrackedDevicePose_t tracked_device_pose[vr::k_unMaxTrackedDeviceCount]{};
+  const auto wait_err = Vr_compositor->WaitGetPoses(tracked_device_pose, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
+  if (wait_err != vr::VRCompositorError_None) {
+    LOG_WARNING.printf("OpenVR WaitGetPoses failed with error code %d", static_cast<int>(wait_err));
+    return false;
+  }
+
+  const auto &hmd_pose = tracked_device_pose[vr::k_unTrackedDeviceIndex_Hmd];
+  if (!hmd_pose.bPoseIsValid) {
+    return false;
+  }
+
+  const VrRigidTransform head_to_absolute = VR_FromOpenVr34(hmd_pose.mDeviceToAbsoluteTracking);
+  const VrRigidTransform eye_to_head_left = VR_FromOpenVr34(Vr_system->GetEyeToHeadTransform(vr::Eye_Left));
+  const VrRigidTransform eye_to_head_right = VR_FromOpenVr34(Vr_system->GetEyeToHeadTransform(vr::Eye_Right));
+
+  const VrRigidTransform eye_left_to_absolute = VR_MultiplyTransform(head_to_absolute, eye_to_head_left);
+  const VrRigidTransform eye_right_to_absolute = VR_MultiplyTransform(head_to_absolute, eye_to_head_right);
+
+  const VrRigidTransform left_eye_view = VR_InvertRigidTransform(eye_left_to_absolute);
+  const VrRigidTransform right_eye_view = VR_InvertRigidTransform(eye_right_to_absolute);
+
+  // Head-anchored cinema screen in front of the user, avoiding direct eye-buffer UI compositing.
+  const VrRigidTransform menu_model = VR_MultiplyTransform(head_to_absolute, VR_Translation(0.0f, 0.0f, -1.25f));
+
+  out_pose.left_eye_view = VR_ToOpenGlColumnMajor(left_eye_view);
+  out_pose.right_eye_view = VR_ToOpenGlColumnMajor(right_eye_view);
+  out_pose.menu_model = VR_ToOpenGlColumnMajor(menu_model);
+  out_pose.valid = true;
+  return true;
+}
+
+bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, const std::array<float, 16> &eye_view,
+                                  const std::array<float, 16> &menu_model) {
   if (surface.texture == 0 || Vr_menu_fbo_texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
     return false;
   }
@@ -365,7 +491,7 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
   auto &gl = VR_GetGlFns();
   if (!gl.bind_framebuffer || !gl.framebuffer_texture_2d || !gl.viewport || !gl.check_framebuffer_status ||
       !gl.clear_color || !gl.clear || !gl.disable || !gl.enable || !gl.matrix_mode || !gl.push_matrix ||
-      !gl.pop_matrix || !gl.load_identity || !gl.frustum || !gl.translatef || !gl.begin || !gl.end ||
+      !gl.pop_matrix || !gl.load_identity || !gl.load_matrixf || !gl.mult_matrixf || !gl.frustum || !gl.begin || !gl.end ||
       !gl.tex_coord2f || !gl.vertex3f || !gl.bind_texture) {
     return false;
   }
@@ -395,10 +521,8 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, float eye_offs
 
   gl.matrix_mode(GL_MODELVIEW);
   gl.push_matrix();
-  gl.load_identity();
-
-  const float menu_distance = 1.25f;
-  gl.translatef(-eye_offset, 0.0f, -menu_distance);
+  gl.load_matrixf(eye_view.data());
+  gl.mult_matrixf(menu_model.data());
 
   const float radius = 1.15f;
   const float arc_half_angle = 0.85f;
@@ -568,10 +692,13 @@ void VR_RenderMenuFrame() {
 
   bool left_curved = false;
   bool right_curved = false;
+  VrPoseMatrices pose_matrices;
 
-  if (Vr_submit_fbo != 0) {
-    left_curved = VR_RenderCurvedMenuToSurface(Vr_submit_left, -0.5f * Vr_eye_separation);
-    right_curved = VR_RenderCurvedMenuToSurface(Vr_submit_right, 0.5f * Vr_eye_separation);
+  const bool have_pose = VR_BuildMenuPoseMatrices(pose_matrices);
+
+  if (Vr_submit_fbo != 0 && have_pose) {
+    left_curved = VR_RenderCurvedMenuToSurface(Vr_submit_left, pose_matrices.left_eye_view, pose_matrices.menu_model);
+    right_curved = VR_RenderCurvedMenuToSurface(Vr_submit_right, pose_matrices.right_eye_view, pose_matrices.menu_model);
   }
 
   if (!left_curved || !right_curved) {
@@ -592,7 +719,7 @@ void VR_RenderMenuFrame() {
     gl.bind_framebuffer(GL_FRAMEBUFFER, 0);
   }
 
-  VR_SubmitOpenVrFrame(Vr_submit_left.texture, Vr_submit_right.texture);
+  VR_SubmitOpenVrFrame(Vr_submit_left.texture, Vr_submit_right.texture, false);
 }
 
 void VR_SubmitStereoFrame(const NewBitmap &left, const NewBitmap &right) {
@@ -606,7 +733,7 @@ void VR_SubmitStereoFrame(const NewBitmap &left, const NewBitmap &right) {
 
   VR_UpdateSubmitSurface(left, Vr_submit_left);
   VR_UpdateSubmitSurface(right, Vr_submit_right);
-  VR_SubmitOpenVrFrame(Vr_submit_left.texture, Vr_submit_right.texture);
+  VR_SubmitOpenVrFrame(Vr_submit_left.texture, Vr_submit_right.texture, true);
 }
 
 void VR_ResetGraphicsResources() {
