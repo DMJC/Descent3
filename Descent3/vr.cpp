@@ -468,7 +468,7 @@ bool VR_BuildMenuPoseMatrices(VrPoseMatrices &out_pose) {
 
 bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, const std::array<float, 16> &eye_view,
                                   const std::array<float, 16> &menu_model) {
-  if (surface.texture == 0 || Vr_menu_fbo_texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
+  if (surface.texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
     return false;
   }
 
@@ -497,8 +497,8 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, const std::arr
   gl.matrix_mode(GL_PROJECTION);
   gl.push_matrix();
   gl.load_identity();
-  const float near_plane = 0.1f;
-  const float far_plane = 10.0f;
+  const float near_plane = 0.01f;
+  const float far_plane = 100.0f;
   const float top = near_plane;
   const float right = top * (static_cast<float>(Vr_submit_width) / static_cast<float>(Vr_submit_height));
   gl.frustum(-right, right, -top, top, near_plane, far_plane);
@@ -536,7 +536,7 @@ bool VR_RenderCurvedMenuToSurface(const VrSubmitSurface &surface, const std::arr
 }
 
 bool VR_RenderCurvedMenuToSurfaceLegacy(const VrSubmitSurface &surface, float eye_offset) {
-  if (surface.texture == 0 || Vr_menu_fbo_texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
+  if (surface.texture == 0 || Vr_submit_width == 0 || Vr_submit_height == 0) {
     return false;
   }
 
@@ -565,8 +565,8 @@ bool VR_RenderCurvedMenuToSurfaceLegacy(const VrSubmitSurface &surface, float ey
   gl.matrix_mode(GL_PROJECTION);
   gl.push_matrix();
   gl.load_identity();
-  const float near_plane = 0.1f;
-  const float far_plane = 10.0f;
+  const float near_plane = 0.01f;
+  const float far_plane = 100.0f;
   const float top = near_plane;
   const float right = top * (static_cast<float>(Vr_submit_width) / static_cast<float>(Vr_submit_height));
   gl.frustum(-right, right, -top, top, near_plane, far_plane);
@@ -574,7 +574,8 @@ bool VR_RenderCurvedMenuToSurfaceLegacy(const VrSubmitSurface &surface, float ey
   gl.matrix_mode(GL_MODELVIEW);
   gl.push_matrix();
   gl.load_identity();
-  gl.translatef(-eye_offset, 0.0f, -1.25f);
+  // Keep mesh clearly in front of camera while debugging visibility issues.
+  gl.translatef(-eye_offset, 0.0f, -2.0f);
 
   const float radius = 1.15f;
   const float arc_half_angle = 0.85f;
@@ -746,7 +747,10 @@ void VR_RenderMenuFrame() {
   bool right_curved = false;
   VrPoseMatrices pose_matrices;
 
-  const bool have_pose = VR_BuildMenuPoseMatrices(pose_matrices);
+  // Debug: force fixed-function legacy path to guarantee camera-space placement while
+  // diagnosing black-screen/behind-camera issues in pose-matrix mode.
+  const bool force_legacy_curved_menu = true;
+  const bool have_pose = !force_legacy_curved_menu && VR_BuildMenuPoseMatrices(pose_matrices);
 
   if (Vr_submit_fbo != 0 && have_pose) {
     left_curved = VR_RenderCurvedMenuToSurface(Vr_submit_left, pose_matrices.left_eye_view, pose_matrices.menu_model);
