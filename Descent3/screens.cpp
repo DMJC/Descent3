@@ -205,6 +205,7 @@
 #include "pilot.h"
 #include "pserror.h"
 #include "joystick.h"
+#include "vr.h"
 
 #define LVLRES_FADEIN_TIME 0.50f
 #define TEXT_REDRAW_COUNT 6.0f
@@ -255,6 +256,11 @@ bool background_loaded = false;
 bool PLR_success = true;
 
 void PLResultsFrame() {
+  const bool vr_menu_mode = VR_IsEnabled() && GetFunctionMode() != MENU_MODE;
+  if (vr_menu_mode) {
+    VR_BeginMenuFramebufferRender();
+  }
+
   StartFrame(0, 0, Max_window_w, Max_window_h);
   Sound_system.BeginSoundFrame(false);
   // Right now we don't want you to do anything
@@ -270,6 +276,10 @@ void PLResultsFrame() {
   grtext_Flush();
   Sound_system.EndSoundFrame();
   EndFrame();
+
+  if (vr_menu_mode) {
+    VR_EndMenuFramebufferRender();
+  }
 }
 
 float paint_start = 0.0f;
@@ -284,6 +294,7 @@ int chunk_sound_id = -1;
 extern void DoScreenshot();
 bool PostLevelResults(bool success) {
   PLR_success = success;
+  const bool vr_menu_mode = VR_IsEnabled() && GetFunctionMode() != MENU_MODE;
 
   if (Dedicated_server)
     return true;
@@ -324,6 +335,9 @@ bool PostLevelResults(bool success) {
       Descent->defer();
       DoUIFrame();
       rend_Flip();
+      if (vr_menu_mode) {
+        VR_RenderMenuFrame();
+      }
       GetUIFrameResult();
     }
 
@@ -351,6 +365,9 @@ bool PostLevelResults(bool success) {
         Descent->defer();
         DoUIFrame();
         rend_Flip();
+        if (vr_menu_mode) {
+          VR_RenderMenuFrame();
+        }
         GetUIFrameResult();
       }
     }
@@ -381,6 +398,9 @@ bool PostLevelResults(bool success) {
 
     DoUIFrame();
     rend_Flip();
+    if (vr_menu_mode) {
+      VR_RenderMenuFrame();
+    }
     GetUIFrameResult();
 
     int key = ddio_KeyInKey();
