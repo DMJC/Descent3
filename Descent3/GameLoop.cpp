@@ -2534,8 +2534,7 @@ void GameDrawMainView() {
       DoMatcensRenderFrame();
       ProcessRenderEvents();
       if (!HUD_disabled) {
-        g3_StartFrameStereo(&eye_pos, &view_orient, HUD_RENDER_ZOOM, is_left_eye, VR_GetStereoEyeSeparation(),
-                            kVrConvergenceDistance);
+        g3_StartFrame(&Viewer_object->pos, &view_orient, HUD_RENDER_ZOOM);
         RenderHUDFrame();
         RenderAuxHUDFrame();
         g3_EndFrame();
