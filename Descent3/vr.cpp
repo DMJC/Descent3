@@ -21,11 +21,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <vector>
 
 #include "3d.h"
 #include "args.h"
 #include "bitmap.h"
+#include "config.h"
 #include "descent.h"
 #include "game.h"
 #include "log.h"
@@ -597,6 +599,17 @@ void VR_InitFromCommandLine() {
   if (Vr_openvr_ready) {
     uint32_t target_w = kVrTargetWidth;
     uint32_t target_h = kVrTargetHeight;
+    if (Vr_system) {
+      Vr_system->GetRecommendedRenderTargetSize(&target_w, &target_h);
+    }
+
+    if (target_w > 0 && target_h > 0 && target_w <= std::numeric_limits<uint16_t>::max() && target_h <= std::numeric_limits<uint16_t>::max()) {
+      AddVideoResolutionIfMissing(static_cast<uint16_t>(target_w), static_cast<uint16_t>(target_h));
+      if (target_w <= (std::numeric_limits<uint16_t>::max() / 2)) {
+        AddVideoResolutionIfMissing(static_cast<uint16_t>(target_w * 2), static_cast<uint16_t>(target_h));
+      }
+    }
+
     LOG_INFO.printf("OpenVR enabled via -vr. Recommended render target %ux%u.", target_w, target_h);
   }
 }

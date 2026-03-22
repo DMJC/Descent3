@@ -354,6 +354,7 @@ void ConfigureDisplayResolutions() {
   }
 
   std::set<tVideoResolution, tVideoResolution::tVideoResolutionCompare> resolutions;
+
   for (int d = 0; d < display_count; d++) {
     SDL_DisplayID display_id = displays[d];
 
@@ -437,6 +438,17 @@ void ConfigureDisplayResolutions() {
   LOG_DEBUG << "Resolution configured to w=" << Video_res_list[Current_video_resolution_id].width
             << "h=" << Video_res_list[Current_video_resolution_id].height << " (id " << Current_video_resolution_id
             << ")";
+}
+
+
+void AddVideoResolutionIfMissing(uint16_t width, uint16_t height) {
+  const tVideoResolution resolution{width, height};
+  if (std::find(Video_res_list.begin(), Video_res_list.end(), resolution) != Video_res_list.end()) {
+    return;
+  }
+
+  Video_res_list.push_back(resolution);
+  std::sort(Video_res_list.begin(), Video_res_list.end(), tVideoResolution::tVideoResolutionCompare{});
 }
 
 tDetailSettings Detail_settings;

@@ -174,6 +174,7 @@ extern bool Game_fullscreen;
  * and set variables Video_res_list, Game_video_resolution and Display_id
  */
 void ConfigureDisplayResolutions();
+void AddVideoResolutionIfMissing(uint16_t width, uint16_t height);
 
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 // KEEP THESE MEMBERS IN THE SAME ORDER, IF YOU ADD,REMOVE, OR CHANGE ANYTHING IN THIS STRUCT, MAKE SURE YOU
